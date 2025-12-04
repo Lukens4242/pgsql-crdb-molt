@@ -1,0 +1,160 @@
+#!/bin/bash
+set -euo pipefail
+
+
+# podman run --rm --network=host -v $(pwd):/app order-app --dsn "$PG_DSN" --generate --insert --fill 
+
+
+# ========================
+# Configuration
+# ========================
+SCHEMA_DIR="/Users/drewdeally/Downloads/cockroach-collections-main/molt-bucket"
+SCHEMA_FILE="$SCHEMA_DIR/postgres_schema.sql"
+CONVERTED_SCHEMA="$SCHEMA_FILE.1"
+FETCH_LOG="$SCHEMA_DIR/fetch.log"
+
+PG_DSN="postgres://admin:secret@localhost:5432/sampledb"
+PG_DSN_MOLT="postgres://admin:secret@host.docker.internal:5432/sampledb?sslmode=disable"
+CRDB_DSN_MOLT="postgres://root@host.docker.internal:26257/defaultdb?sslmode=disable"
+
+pause() {
+  echo ""
+  read -p "⏸️  Press [Enter] to continue to the next step..." _
+  echo ""
+}
+
+# ========================
+# --reset option
+# ========================
+if [[ "${1:-}" == "--reset" ]]; then
+  echo "🧹 Resetting environment..."
+
+  echo "🛑 Stopping and removing containers..."
+  podman rm -f postgres 2>/dev/null || true
+  podman rm -f crdb 2>/dev/null || true
+
+  echo "🧼 Removing volume and files..."
+  podman volume rm pgdata 2>/dev/null || true
+  rm -f ./postgresql.conf
+  rm -f "$SCHEMA_FILE" "$CONVERTED_SCHEMA" "$FETCH_LOG"
+  echo "✅ Environment fully reset."
+  exit 0
+fi
+
+# ========================
+# 1. Start Postgres
+# ========================
+echo "🚀 [1/11] Starting Postgres container..."
+podman run --rm -d --name postgres -p 5432:5432 \
+  -e POSTGRES_USER=admin \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=sampledb \
+  -v pgdata:/var/lib/postgresql/data \
+  docker.io/library/postgres:15
+pause
+
+# ========================
+# 2. Configure logical replication
+# ========================
+echo "🛠️  [2/11] Configuring PostgreSQL for logical replication..."
+
+echo "📤 Copying postgresql.conf from container..."
+sleep 5
+podman cp postgres:/var/lib/postgresql/data/postgresql.conf ./postgresql.conf
+
+echo "🔧 Editing WAL settings..."
+sed -i '' 's/^#*wal_level.*/wal_level = logical/' ./postgresql.conf
+sed -i '' 's/^#*max_replication_slots.*/max_replication_slots = 4/' ./postgresql.conf
+sed -i '' 's/^#*max_wal_senders.*/max_wal_senders = 4/' ./postgresql.conf
+
+echo "📥 Copying updated config back and restarting container..."
+podman cp ./postgresql.conf postgres:/var/lib/postgresql/data/postgresql.conf
+podman restart postgres
+sleep 5
+pause
+
+# ========================
+# 3. Validate replication settings
+# ========================
+echo "✅ [3/11] Verifying PostgreSQL replication settings..."
+PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c "SHOW wal_level;"
+PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c "SHOW max_replication_slots;"
+PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c "SHOW max_wal_senders;"
+pause
+
+# ========================
+# 4. Populate sample data
+# ========================
+echo "📦 [4/11] Inserting test orders into Postgres..."
+python3 orders_with_retry_fk.py --dsn "$PG_DSN" --generate --insert --fill
+pause
+
+# ========================
+# 5. Dump schema from Postgres
+# ========================
+echo "📄 [5/11] Dumping schema to $SCHEMA_FILE..."
+mkdir -p "$SCHEMA_DIR"
+podman exec -i postgres pg_dump -U admin -d sampledb --schema-only -t orders -t order_fills > "$SCHEMA_FILE"
+pause
+
+# ========================
+# 6. Start CockroachDB
+# ========================
+echo "🪵 [6/11] Starting CockroachDB container..."
+podman run --rm -d --name crdb -p 26257:26257 -p 8080:8080 cockroachdb/cockroach start-single-node --insecure
+sleep 5
+
+until podman exec crdb cockroach sql --insecure --host=localhost -e "SELECT 1;" &>/dev/null; do
+  echo "⏳ Waiting for CockroachDB to become ready..."
+  sleep 2
+done
+pause
+
+# ========================
+# 7. Convert schema with molt
+# ========================
+echo "🔁 [7/11] Converting schema for CockroachDB using molt..."
+podman run --rm \
+  -v "$SCHEMA_DIR:/molt-data" \
+  cockroachdb/molt convert postgres \
+  --schema /molt-data/postgres_schema.sql \
+  --url "$CRDB_DSN_MOLT"
+pause
+
+# ========================
+# 8. Apply schema to CockroachDB
+# ========================
+echo "📥 [8/11] Applying converted schema to CockroachDB..."
+podman exec -i crdb cockroach sql --insecure --host=localhost < "$CONVERTED_SCHEMA"
+pause
+
+# ========================
+# 9. Verify CockroachDB schema
+# ========================
+echo "🔍 [9/11] Verifying CockroachDB schema..."
+podman exec -it crdb cockroach sql --insecure --host=localhost -e "SHOW CREATE ALL TABLES;"
+pause
+
+# ========================
+# 10. Run molt fetch with replication
+# ========================
+echo "🚚 [10/11] Running molt fetch with data + replication..."
+docker run --rm -it \
+  -v "$SCHEMA_DIR:/molt-bucket" \
+  cockroachdb/molt \
+  fetch \
+  --source "$PG_DSN_MOLT" \
+  --target "$CRDB_DSN_MOLT" \
+  --allow-tls-mode-disable \
+  --table-handling truncate-if-exists \
+  --direct-copy \
+  --pglogical-replication-slot-name replication_slot \
+  --mode data-load-and-replication \
+  --logging=debug | tee "$FETCH_LOG"
+pause
+
+# ========================
+# 11. Done
+# ========================
+echo "🎉 [11/11] Pipeline complete!"
+

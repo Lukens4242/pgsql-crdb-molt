@@ -1,0 +1,6 @@
+{
+    "host": "host.docker.internal",
+    "port": 30005,
+    "sink_query_parameters": "insecure_tls_skip_verify=true"
+}
+

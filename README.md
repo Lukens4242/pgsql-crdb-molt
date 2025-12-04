@@ -41,8 +41,7 @@ This will create a container for order-app.
 ```bash
 chmod +x full_pipeline.sh
 ./full_pipeline.sh
-
-
+```
 
 The script will:
 
@@ -53,11 +52,18 @@ Dump and convert schema
 Start CockroachDB
 Apply schema and remove foreign keys
 Start MOLT replication
+Failback to PostgreSQL
 ⚠️ The script will pause at each step and wait for you to press [Enter] to continue. Use this time to inspect output, logs, or states.
 
+```bash
+./full_pipeline.sh --reset
+```
+
+This will reset the environment, clean up containers, remove logs, remove data, remove certificates, etc.
 
 
 
+Information below is old and kept for reference.....
 
 ###4. 🔁 Start the Live Replication Console
 When the script reaches Step 10, open a new terminal in the same directory and run:

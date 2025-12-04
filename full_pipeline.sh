@@ -9,7 +9,7 @@ set -euo pipefail
 # ========================
 # Configuration
 # ========================
-SCHEMA_DIR="/Users/lukens/Downloads/MOLT_demo_fromPG_toCRDB_withMOapp/cockroach-collections-main/molt-bucket"
+SCHEMA_DIR="./cockroach-collections-main/molt-bucket"
 SCHEMA_FILE="$SCHEMA_DIR/postgres_schema.sql"
 CONVERTED_SCHEMA="$SCHEMA_FILE.1"
 FETCH_LOG="fetch.log"
@@ -18,11 +18,7 @@ VERIFY_LOG="verify.log"
 PG_DSN="postgres://admin:secret@localhost:5432/sampledb"
 PG_DSN_MOLT="postgres://admin:secret@host.docker.internal:5432/sampledb?sslmode=disable"
 CRDB_DSN_MOLT="postgresql://root@host.docker.internal:26257/defaultdb?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
-CRDB_DSN_REPLICATOR="postgresql://root@host.docker.internal:26257/defaultdb?sslcert=./certs/client.root.crt&sslkey=./certs/client.root.key&sslmode=verify-full&sslrootcert=./certs/ca.pem"
-
-echo "Fetching latest docker images..."
-podman pull cockroachdb/molt
-podman pull cockroachdb/replicator
+CRDB_DSN_REPLICATOR="postgresql://root@host.docker.internal:26257/defaultdb?sslcert=/certs/client.root.crt&sslkey=/certs/client.root.key&sslmode=verify-full&sslrootcert=/certs/ca.pem"
 
 pause() {
   echo ""
@@ -39,11 +35,12 @@ if [[ "${1:-}" == "--reset" ]]; then
   echo "🛑 Stopping and removing containers..."
   podman rm -f postgres 2>/dev/null || true
   podman rm -f crdb 2>/dev/null || true
+  podman rm -f replicator_forward 2>/dev/null || true
   rm -f index.txt* serial.txt* ./certs/*
 
   echo "🧼 Removing volume and files..."
   podman volume rm pgdata 2>/dev/null || true
-  rm -f ./postgresql.conf
+  rm -f ./postgresql.conf ./orders_1m.csv
   rm -f "$SCHEMA_FILE" "$CONVERTED_SCHEMA" "$FETCH_LOG" "$VERIFY_LOG"
   echo "✅ Environment fully reset."
   exit 0
@@ -53,6 +50,12 @@ fi
 # 1. Start Postgres
 # ========================
 echo "🚀 [1/17] Starting Postgres container..."
+
+echo "Fetching latest docker images..."
+podman pull cockroachdb/molt
+podman pull cockroachdb/replicator
+podman pull cockroachdb/cockroach
+
 podman run --rm -d --name postgres -p 5432:5432 \
   -e POSTGRES_USER=admin \
   -e POSTGRES_PASSWORD=secret \
@@ -143,7 +146,7 @@ until podman exec crdb cockroach sql --host=127.0.0.1 --port=26257 --user=root -
 done
 podman exec crdb cockroach sql --host=127.0.0.1 --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SET CLUSTER SETTING kv.rangefeed.enabled=true;" 
 
-echo "Converting schema for CockroachDB using molt, apply to CRDB and Verify  Next..."
+echo "Converting schema for CockroachDB using molt, apply to CRDB and verify next..."
 pause
 
 # ========================
@@ -170,12 +173,10 @@ podman exec -i crdb cockroach sql --host=127.0.0.1 --port=26257 --user=root --da
 # ========================
 echo "🔍 [10/17] Verifying CockroachDB schema..."
 podman exec -it crdb cockroach sql --host=127.0.0.1 --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SHOW CREATE ALL TABLES;"
-echo "Run molt fetch with replication Next in Continous mode , in new window run order-app --dsn $PG_DSN --generate --insert --fill"
-echo "Run SQL counts in source and target"
-pause
 
 echo "Checking counts between postgres and CRDB..."
 echo "Postgres should have data in it and CRDB should not, as no transfer has occurred yet."
+pause
  podman exec -it postgres psql -U admin -d sampledb -c "SELECT 
   (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
   (SELECT COUNT(1) FROM orders) AS orders_count,
@@ -184,13 +185,14 @@ echo "Postgres should have data in it and CRDB should not, as no transfer has oc
   (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"
+pause
 
 # ========================
 # 11. Run molt fetch 
 # ========================
 echo "🚚 [11/17] Running molt fetch..."
 podman run --rm -it \
-  --name=molt_fetch
+  --name=molt_fetch \
   -v "$SCHEMA_DIR:/molt-bucket" \
   -v "./certs:/certs" \
   cockroachdb/molt \
@@ -204,10 +206,6 @@ podman run --rm -it \
   --mode data-load \
   --logging=debug --replicator-flags "-v" | tee "$FETCH_LOG"
 
-echo "Getting the CDC Cursor for late use with Replicator so we can begin streaming from the correct timestamp."
-
-CDC_CURSOR=$(grep cdc_cursor $FETCH_LOG | head -n 1 | sed 's/.*cdc_cursor":"//' | sed 's/".*//')
-echo "CDC timestamp: $CDC_CURSOR"
 pause
 
 # ========================
@@ -227,7 +225,6 @@ podman run --rm -it \
 pause
 
 echo "Pretty print MOLT Verify output..."
-pause
 cat $VERIFY_LOG | tail -n +2 | jq
 pause
 echo "Checking counts between postgres and CRDB..."
@@ -240,6 +237,7 @@ echo "Postgres should have data in it and CRDB should have the same count as lon
   (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"
+pause
 
 # ========================
 # 13. Populate sample data
@@ -259,6 +257,8 @@ echo "Postgres should have more data in it than CRDB, as replication has not bee
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"
 
+pause
+
 # ========================
 # 14. Run replicator for replication... 
 # ========================
@@ -275,7 +275,7 @@ podman run \
   --sourceConn "$PG_DSN_MOLT" \
   --targetConn "$CRDB_DSN_REPLICATOR" \
   --slotName replication_slot \
-  --publicationName alltables
+  --publicationName molt_fetch
 
 sleep 3
 

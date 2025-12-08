@@ -27,7 +27,7 @@ CRDB_DSN_WORKLOAD="postgresql://root@localhost:26257/defaultdb?sslcert=./certs/c
 
 pause() {
   echo ""
-  read -p "⏸️  Press [Enter] to continue..." _
+  read -p "⏸️  Press [Enter] to continue..." 
   echo ""
 }
 

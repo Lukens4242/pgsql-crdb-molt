@@ -396,7 +396,7 @@ podman run \
   --bindAddr :30004 \
   --metricsAddr :30005 \
   --targetConn "$PG_DSN_MOLT" \
-  --stagingConn "$CRDB_DSN_REPLICATOR" \
+  --stagingConn "$CRDB_DSN_MOLT" \
   --tlsCertificate /certs/node-rep.crt \
   --tlsPrivateKey /certs/node-rep.key
 
@@ -418,7 +418,7 @@ echo 'Create changefeed to MOLT Replicator'
 pause
 
 podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE CHANGEFEED FOR TABLE orders, order_fills
- INTO 'webhook-https://$REP_IP:30004/defaultdb?client_cert=$REP_NODE_CERT_BASE64_URL_ENCODED&client_key=$REP_NODE_KEY_BASE64_URL_ENCODED&ca_cert=$CA_CERT_BASE64_URL_ENCODED' 
+ INTO 'webhook-https://$REP_IP:30004/sampledb?client_cert=$REP_NODE_CERT_BASE64_URL_ENCODED&client_key=$REP_NODE_KEY_BASE64_URL_ENCODED&ca_cert=$CA_CERT_BASE64_URL_ENCODED' 
  WITH updated, 
       resolved = '250ms', 
       min_checkpoint_frequency = '250ms', 

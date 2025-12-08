@@ -22,6 +22,7 @@ REP_IP="172.27.0.104"
 PG_DSN="postgres://admin:secret@localhost:5432/sampledb"
 PG_DSN_MOLT="postgres://admin:secret@pgsql_host:5432/sampledb?sslmode=disable"
 CRDB_DSN_MOLT="postgresql://root@crdb_host:26257/defaultdb?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
+CRDB_DSN_STAGING="postgresql://root@crdb_host:26257/staging?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
 CRDB_DSN_REPLICATOR="postgresql://root@$CRDB_IP:26257/defaultdb?sslcert=/certs/client.root.crt&sslkey=/certs/client.root.key&sslmode=verify-full&sslrootcert=/certs/ca.pem"
 CRDB_DSN_WORKLOAD="postgresql://root@localhost:26257/defaultdb?sslcert=./certs/client.root.crt&sslkey=./certs/client.root.key&sslmode=verify-full&sslrootcert=./certs/ca.crt"
 
@@ -198,7 +199,8 @@ until podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --
   echo "⏳ Waiting for CockroachDB to become ready..."
   sleep 2
 done
-podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SET CLUSTER SETTING kv.rangefeed.enabled=true;" 
+podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SET CLUSTER SETTING kv.rangefeed.enabled=true;"
+podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE DATABASE staging;"
 
 # ========================
 # 8. Convert schema with molt
@@ -396,7 +398,7 @@ podman run \
   --bindAddr :30004 \
   --metricsAddr :30005 \
   --targetConn "$PG_DSN_MOLT" \
-  --stagingConn "$CRDB_DSN_MOLT" \
+  --stagingConn "$CRDB_DSN_STAGING" \
   --tlsCertificate /certs/node-rep.crt \
   --tlsPrivateKey /certs/node-rep.key
 

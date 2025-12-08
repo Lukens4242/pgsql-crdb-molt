@@ -27,8 +27,46 @@ CRDB_DSN_WORKLOAD="postgresql://root@localhost:26257/defaultdb?sslcert=./certs/c
 
 pause() {
   echo ""
-  read -p "⏸️  Press [Enter] to continue to the next step..." _
+  read -p "⏸️  Press [Enter] to continue..." _
   echo ""
+}
+
+checkcounts() {
+ echo "Postgresql count..." 
+ podman exec -it postgres psql -U admin -d sampledb -c "SELECT 
+  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
+  (SELECT COUNT(1) FROM orders) AS orders_count,
+  NOW() AS current_time;"
+ echo "Cockroach count..."
+ podman exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
+  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
+  (SELECT COUNT(1) FROM orders) AS orders_count,
+  NOW() AS current_time;"
+}
+
+verifyprintpretty() {
+ cat $VERIFY_LOG | tail -n +2 | jq
+}
+
+verify() {
+  podman run --rm -it \
+  --name=molt_verify \
+  --hostname=molt_verify \
+  --ip=$MOLT_IP \
+  --net=moltdemo \
+  -v "$SCHEMA_DIR:/molt-bucket" \
+  -v "./certs:/certs" \
+  cockroachdb/molt \
+  verify \
+  --table-filter '[^_].*' \
+  --source "$PG_DSN_MOLT" \
+  --target "$CRDB_DSN_MOLT" \
+  --allow-tls-mode-disable | tee "$VERIFY_LOG"
+}
+
+generatedata() {
+  python3 orders_with_retry_fk.py --dsn "$1" --generate --insert --fill
+
 }
 
 # ========================
@@ -73,14 +111,14 @@ podman run --rm -d --name postgres -p 5432:5432 \
   -e POSTGRES_DB=sampledb \
   -v pgdata:/var/lib/postgresql/data \
   docker.io/library/postgres:15
-echo "Configure logical replication Next..."
-pause
+
 
 # ========================
 # 2. Configure logical replication
 # ========================
+echo
 echo "🛠️  [2/17] Configuring PostgreSQL for logical replication..."
-
+pause
 echo "📤 Copying postgresql.conf from container..."
 sleep 5
 podman cp postgres:/var/lib/postgresql/data/postgresql.conf ./postgresql.conf
@@ -94,40 +132,40 @@ echo "📥 Copying updated config back and restarting container..."
 podman cp ./postgresql.conf postgres:/var/lib/postgresql/data/postgresql.conf
 podman restart postgres
 sleep 5
-echo " Validate replication settings Next..."
-pause
 
 # ========================
 # 3. Validate replication settings
 # ========================
+echo 
 echo "✅ [3/17] Verifying PostgreSQL replication settings..."
+pause
 PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c "SHOW wal_level;"
 PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c "SHOW max_replication_slots;"
 PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c "SHOW max_wal_senders;"
-echo " Populate sample data into PG database Next..."
-pause
 
 # ========================
 # 4. Populate sample data
 # ========================
+echo
 echo "📦 [4/17] Inserting test orders into Postgres..."
-python3 orders_with_retry_fk.py --dsn "$PG_DSN" --generate --insert --fill
-echo "Dump schema from Postgres for CRDB target Next..."
 pause
+generatedata "$PG_DSN"
 
 # ========================
 # 5. Dump schema from Postgres
 # ========================
+echo
 echo "📄 [5/17] Dumping schema to $SCHEMA_FILE..."
+pause
 mkdir -p "$SCHEMA_DIR"
 podman exec -i postgres pg_dump -U admin -d sampledb --schema-only -t orders -t order_fills > "$SCHEMA_FILE"
-echo "Starting CockroachDB container Next..."
-pause
 
 # ========================
 # 6. Create CockroachDB Certificates
 # ========================
+echo
 echo "🪵 [6/17] Creating CockroachDB certificates..."
+pause
 rm -f index.txt* serial.txt* ./certs/*
 openssl genrsa -out ./certs/ca.key 2048
 openssl req -new -x509 -config ca.cnf -key ./certs/ca.key -out ./certs/ca.crt -days 365 -batch
@@ -141,19 +179,18 @@ openssl genrsa -out ./certs/client.root.key 2048
 openssl req -new -config client.cnf -key ./certs/client.root.key -out ./certs/client.root.csr -batch
 openssl ca -config ca.cnf -keyfile ./certs/ca.key -cert ./certs/ca.crt -policy signing_policy -extensions signing_client_req -out ./certs/client.root.crt -outdir ./certs/ -in ./certs/client.root.csr -batch
 openssl x509 -in ./certs/ca.crt -out ./certs/ca.pem -outform PEM
-pause
 
 openssl genrsa -out certs/node-rep.key 2048
 openssl req -new -config rep.cnf -key ./certs/node-rep.key -out ./certs/node-rep.csr -batch
 openssl ca -config ca.cnf -keyfile ./certs/ca.key -cert ./certs/ca.crt -policy signing_policy -extensions signing_node_req -out ./certs/node-rep.crt -outdir ./certs/ -in ./certs/node-rep.csr -batch
 openssl x509 -in ./certs/node-rep.crt -text | grep "X509v3 Subject Alternative Name" -A 1
 
-pause
-
 # ========================
 # 7. Start CockroachDB
 # ========================
+echo
 echo "🪵 [7/17] Starting CockroachDB container..."
+pause
 podman run -d -v "./certs:/cockroach/certs" --net=moltdemo --ip=$CRDB_IP --hostname=crdb_host --env COCKROACH_DATABASE=defaultdb --env COCKROACH_USER=root --env COCKROACH_PASSWORD=password --name=crdb -p 26257:26257 -p 8080:8080 cockroachdb/cockroach start-single-node --http-addr=crdb:8080
 sleep 5
 
@@ -163,13 +200,12 @@ until podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --
 done
 podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SET CLUSTER SETTING kv.rangefeed.enabled=true;" 
 
-echo "Converting schema for CockroachDB using molt, apply to CRDB and verify next..."
-pause
-
 # ========================
 # 8. Convert schema with molt
 # ========================
+echo
 echo "🔁 [8/17] Converting schema for CockroachDB using molt..."
+pause
 podman run --rm \
   -v "$SCHEMA_DIR:/molt-data" \
   -v "./certs:/certs" \
@@ -179,38 +215,33 @@ podman run --rm \
   cockroachdb/molt convert postgres \
   --schema /molt-data/postgres_schema.sql \
   --url "$CRDB_DSN_MOLT"
-#pause
 
 # ========================
 # 9. Apply schema to CockroachDB
 # ========================
+echo
 echo "📥 [9/17] Applying converted schema to CockroachDB..."
+pause
 podman exec -i crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ < "$CONVERTED_SCHEMA"
-#pause
 
 # ========================
 # 10. Verify CockroachDB schema
 # ========================
+echo
 echo "🔍 [10/17] Verifying CockroachDB schema..."
+pause
 podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SHOW CREATE ALL TABLES;"
-
+pause
 echo "Checking counts between postgres and CRDB..."
 echo "Postgres should have data in it and CRDB should not, as no transfer has occurred yet."
-pause
- podman exec -it postgres psql -U admin -d sampledb -c "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
- podman exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
-pause
+checkcounts
 
 # ========================
 # 11. Run molt fetch 
 # ========================
+echo
 echo "🚚 [11/17] Running molt fetch..."
+pause
 podman run --rm -it \
   --name=molt_fetch \
   --net=moltdemo \
@@ -229,12 +260,12 @@ podman run --rm -it \
   --mode data-load \
   --logging=debug --replicator-flags "-v" | tee "$FETCH_LOG"
 
-pause
-
 # ========================
 # 12. Run molt verify to compare the source data and CRDB data (any activity since the data load was done will result in false differences)... 
 # ========================
+echo
 echo "🚚 [12/17] Running molt verify to compare the source data and CRDB data (any activity since the data load was done will result in false differences)..."
+pause
 podman run --rm -it \
   --name=molt_verify \
   --hostname=molt_verify \
@@ -248,47 +279,37 @@ podman run --rm -it \
   --source "$PG_DSN_MOLT" \
   --target "$CRDB_DSN_MOLT" \
   --allow-tls-mode-disable | tee "$VERIFY_LOG"
-pause
 
+echo
 echo "Pretty print MOLT Verify output..."
+echo
 cat $VERIFY_LOG | tail -n +2 | jq
-pause
+
+echo
 echo "Checking counts between postgres and CRDB..."
 echo "Postgres should have data in it and CRDB should have the same count as long as no new data has been generated since the fetch."
- podman exec -it postgres psql -U admin -d sampledb -c "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
- podman exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
 pause
+checkcounts
 
 # ========================
 # 13. Populate sample data
 # ========================
+echo
 echo "📦 [13/17] Running workload that puts data into Postgres..."
-python3 orders_with_retry_fk.py --dsn "$PG_DSN" --generate --insert --fill
 pause
+generatedata "$PG_DSN"
 
+echo
 echo "Checking counts between postgres and CRDB..."
 echo "Postgres should have more data in it than CRDB, as replication has not been started yet."
- podman exec -it postgres psql -U admin -d sampledb -c "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
- podman exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
-
-pause
+checkcounts
 
 # ========================
 # 14. Run replicator for replication... 
 # ========================
+echo
 echo "🚚 [14/17] Running replication with replicator..."
+pause
 podman run \
   -d \
   --name=replicator_forward \
@@ -308,55 +329,34 @@ podman run \
 
 sleep 10
 
+echo
 echo "View MOLT Replicator log output..."
-pause
-#podman logs replicator_forward
-#pause
 echo "Checking counts between postgres and CRDB..."
 echo "Once replication has caught up, both Postgres and CRDB should have the same counts..."
- podman exec -it postgres psql -U admin -d sampledb -c "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
- podman exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
-pause
+checkcounts
 
+echo
 echo "Running molt verify to compare the source data and CRDB data (any activity since the last set of data was loaded will result in false differences)..."
-podman run --rm -it \
-  --name=molt_verify \
-  --hostname=molt_verify \
-  --ip=$MOLT_IP \
-  --net=moltdemo \
-  -v "$SCHEMA_DIR:/molt-bucket" \
-  -v "./certs:/certs" \
-  cockroachdb/molt \
-  verify \
-  --table-filter '[^_].*' \
-  --source "$PG_DSN_MOLT" \
-  --target "$CRDB_DSN_MOLT" \
-  --allow-tls-mode-disable | tee "$VERIFY_LOG"
 pause
+verify
+
+echo
 echo "Pretty print MOLT Verify output..."
 pause
-cat $VERIFY_LOG | tail -n +2 | jq
-pause
+verifyprintpretty
 
 # ========================
 # 15. Stop app
 # ========================
+echo
 echo "[15/17] Stop the workload generating data if it is still running."
-echo
-echo 'Prepare for scheduled downtime.  Here you would stop the application connecting to pgsql and let the replication from pgsql->crdb complete with any last rows.'
 pause
-echo 'Next: Set up reverse replication for failback using MOLT Replicator'
-echo
+echo 'Prepare for scheduled downtime.  Here you would stop the application connecting to pgsql and let the replication from pgsql->crdb complete with any last rows.'
 
 # ========================
 # 16. Start MOLT in failback mode
 # ========================
+echo
 echo "[16/17] Continue to start MOLT in failback mode."
 pause
 
@@ -370,11 +370,11 @@ echo 'TLS/endpoint key base64-encoded and URL-encoded:'
 echo $REP_NODE_KEY_BASE64_URL_ENCODED
 echo 'TLS/endpoint key base64-encoded and URL-encoded:'
 echo $CA_CERT_BASE64_URL_ENCODED
-pause
 
+echo
+echo "Begin of minimal downtime"
 echo "Stopping Replicator forward migration"
 podman stop replicator_forward
-
 pause
 
 echo
@@ -400,6 +400,7 @@ podman run \
   --tlsCertificate /certs/node-rep.crt \
   --tlsPrivateKey /certs/node-rep.key
 
+echo
 echo "Replicator logs"
 pause
 podman logs replicator_reverse
@@ -417,8 +418,9 @@ echo
 echo 'Create changefeed to MOLT Replicator'
 pause
 
+# for pgsql/crdb sources, for failback, you need to include the schema as part of the URI
 podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE CHANGEFEED FOR TABLE orders, order_fills
- INTO 'webhook-https://$REP_IP:30004/sampledb?client_cert=$REP_NODE_CERT_BASE64_URL_ENCODED&client_key=$REP_NODE_KEY_BASE64_URL_ENCODED&ca_cert=$CA_CERT_BASE64_URL_ENCODED' 
+ INTO 'webhook-https://$REP_IP:30004/sampledb/public?client_cert=$REP_NODE_CERT_BASE64_URL_ENCODED&client_key=$REP_NODE_KEY_BASE64_URL_ENCODED&ca_cert=$CA_CERT_BASE64_URL_ENCODED' 
  WITH updated, 
       resolved = '250ms', 
       min_checkpoint_frequency = '250ms', 
@@ -426,23 +428,18 @@ podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --databa
       cursor = '$CLUSTER_LOGICAL_TIMESTAMP', 
       webhook_sink_config = '{\"Flush\":{\"Bytes\":1048576,\"Frequency\":\"1s\"}}';"
 
+echo
+echo "Display logs for replicator_reverse..."
+pause
 podman logs replicator_reverse
-pause
-
-echo "Checking counts between postgres and CRDB..."
-echo "Both should have the same counts."
- podman exec -it postgres psql -U admin -d sampledb -c "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
- podman exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
-pause
 
 echo
-echo 'Reverse replication is set up'
+echo "Check the counts between postgres and CRDB.  They should be the same."
+pause
+checkcounts
+
+echo
+echo "Reverse replication is set up"
 echo "Then you would configure the application to connect to crdb and start it up."
 echo "Perform your final go/no-go tests."
 echo
@@ -453,25 +450,16 @@ pause
 
 echo
 echo 'Show reverse replication is working by inserting data into CRDB.'
-echo
 pause
-python3 orders_with_retry_fk.py --dsn "$CRDB_DSN_WORKLOAD" --generate --insert --fill
+generatedata "$CRDB_DSN_WORKLOAD"
 pause
 
 echo "Sleep 10 seconds to let the change propagate to postgres."
 sleep 10
 
 echo "Checking counts between postgres and CRDB..."
-echo "Both should have the same counts."
- podman exec -it postgres psql -U admin -d sampledb -c "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
- podman exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
-  (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
-  (SELECT COUNT(1) FROM orders) AS orders_count,
-  NOW() AS current_time;"
 pause
+checkcounts
 
 echo
 echo 'Look at MOLT Replicator logs again.'
@@ -483,5 +471,6 @@ podman logs replicator_reverse
 # ========================
 # 17. Done
 # ========================
+echo
 echo "🎉 [17/17] Pipeline complete!"
 

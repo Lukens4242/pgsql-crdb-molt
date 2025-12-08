@@ -22,7 +22,7 @@ REP_IP="172.27.0.104"
 PG_DSN="postgres://admin:secret@localhost:5432/sampledb"
 PG_DSN_MOLT="postgres://admin:secret@pgsql_host:5432/sampledb?sslmode=disable"
 CRDB_DSN_MOLT="postgresql://root@crdb_host:26257/defaultdb?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
-CRDB_DSN_STAGING="postgresql://root@crdb_host:26257/staging?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
+CRDB_DSN_STAGING="postgresql://root@crdb_host:26257/_replicator?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
 CRDB_DSN_REPLICATOR="postgresql://root@$CRDB_IP:26257/defaultdb?sslcert=/certs/client.root.crt&sslkey=/certs/client.root.key&sslmode=verify-full&sslrootcert=/certs/ca.pem"
 CRDB_DSN_WORKLOAD="postgresql://root@localhost:26257/defaultdb?sslcert=./certs/client.root.crt&sslkey=./certs/client.root.key&sslmode=verify-full&sslrootcert=./certs/ca.crt"
 
@@ -394,18 +394,48 @@ podman run \
  cockroachdb/replicator \
   start \
   -v \
+  --stagingCreateSchema \
   --stagingSchema _replicator \
   --bindAddr :30004 \
   --metricsAddr :30005 \
   --targetConn "$PG_DSN_MOLT" \
   --stagingConn "$CRDB_DSN_STAGING" \
   --tlsCertificate /certs/node-rep.crt \
-  --tlsPrivateKey /certs/node-rep.key
+  --tlsPrivateKey /certs/node-rep.key \
+  --disableAuthentication
 
 echo
 echo "Replicator logs"
 pause
 podman logs replicator_reverse
+
+echo
+echo "Create JWT auth token"
+pause
+openssl ecparam -out ./certs/ec.key -genkey -name prime256v1
+openssl ec -in ./certs/ec.key -pubout -out ./certs/ec.pub
+ECPUB=`cat ./certs/ec.pub`
+
+#podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "INSERT INTO _replicator.jwt_public_keys (public_key) VALUES (\$pub\$
+#$ECPUB
+#\$pub\$);
+#"
+#podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "select * from _replicator.jwt_public_keys;"
+
+podman run \
+ -v ./certs:/certs \
+ cockroachdb/replicator \
+  make-jwt \
+  -k /certs/ec.key \
+  -a sampledb \
+  -o /certs/out.jwt
+JWT=`cat ./certs/out.jwt`
+
+echo 
+echo "Restarting replicator_reverse to read the new keys."
+podman restart replicator_reverse
+sleep 5
+
 
 echo
 echo 'Get the CockroachCB cluster logical timestamp for the changefeed cursor parameter'
@@ -422,13 +452,14 @@ pause
 
 # for pgsql/crdb sources, for failback, you need to include the schema as part of the URI
 podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE CHANGEFEED FOR TABLE orders, order_fills
- INTO 'webhook-https://$REP_IP:30004/sampledb/public?client_cert=$REP_NODE_CERT_BASE64_URL_ENCODED&client_key=$REP_NODE_KEY_BASE64_URL_ENCODED&ca_cert=$CA_CERT_BASE64_URL_ENCODED' 
+ INTO 'webhook-https://$REP_IP:30004/sampledb/public?client_cert=$REP_NODE_CERT_BASE64_URL_ENCODED&client_key=$REP_NODE_KEY_BASE64_URL_ENCODED&ca_cert=$CA_CERT_BASE64_URL_ENCODED&insecure_tls_skip_verify=true' 
  WITH updated, 
       resolved = '250ms', 
       min_checkpoint_frequency = '250ms', 
       initial_scan = 'no', 
       cursor = '$CLUSTER_LOGICAL_TIMESTAMP', 
-      webhook_sink_config = '{\"Flush\":{\"Bytes\":1048576,\"Frequency\":\"1s\"}}';"
+      webhook_sink_config = '{\"Flush\":{\"Bytes\":1048576,\"Frequency\":\"1s\"}}', \
+      webhook_auth_header = 'Bearer $JWT';"
 
 echo
 echo "Display logs for replicator_reverse..."

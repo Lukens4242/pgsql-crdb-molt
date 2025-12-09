@@ -402,7 +402,8 @@ podman run \
   --stagingConn "$CRDB_DSN_STAGING" \
   --tlsCertificate /certs/node-rep.crt \
   --tlsPrivateKey /certs/node-rep.key \
-  --disableAuthentication
+  --disableAuthentication \
+# --tlsSelfSigned
 
 echo
 echo "Replicator logs"

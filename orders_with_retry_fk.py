@@ -26,9 +26,9 @@ opt = parser.parse_args()
 DB_URI = opt.dsn
 
 ORDERS_FILE = "orders_1m.csv"
-TOTAL_ORDERS = 3_000
+TOTAL_ORDERS = 10_000
 BATCH_SIZE = 8
-THREADS = 4
+THREADS = 8
 
 register_uuid()
 

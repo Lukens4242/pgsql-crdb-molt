@@ -181,11 +181,6 @@ openssl req -new -config client.cnf -key ./certs/client.root.key -out ./certs/cl
 openssl ca -config ca.cnf -keyfile ./certs/ca.key -cert ./certs/ca.crt -policy signing_policy -extensions signing_client_req -out ./certs/client.root.crt -outdir ./certs/ -in ./certs/client.root.csr -batch
 openssl x509 -in ./certs/ca.crt -out ./certs/ca.pem -outform PEM
 
-openssl genrsa -out certs/node-rep.key 2048
-openssl req -new -config rep.cnf -key ./certs/node-rep.key -out ./certs/node-rep.csr -batch
-openssl ca -config ca.cnf -keyfile ./certs/ca.key -cert ./certs/ca.crt -policy signing_policy -extensions signing_node_req -out ./certs/node-rep.crt -outdir ./certs/ -in ./certs/node-rep.csr -batch
-openssl x509 -in ./certs/node-rep.crt -text | grep "X509v3 Subject Alternative Name" -A 1
-
 # ========================
 # 7. Start CockroachDB
 # ========================
@@ -362,16 +357,23 @@ echo
 echo "[16/17] Continue to start MOLT in failback mode."
 pause
 
-REP_NODE_CERT_BASE64_URL_ENCODED=$(base64 -i ./certs/node-rep.crt | jq -R -r '@uri')
-REP_NODE_KEY_BASE64_URL_ENCODED=$(base64 -i ./certs/node-rep.key | jq -R -r '@uri')
-CA_CERT_BASE64_URL_ENCODED=$(base64 -i ./certs/ca.crt | jq -R -r '@uri')
-echo
-echo 'TLS/endpoint certificate base64-encoded and URL-encoded:'
-echo $REP_NODE_CERT_BASE64_URL_ENCODED
-echo 'TLS/endpoint key base64-encoded and URL-encoded:'
-echo $REP_NODE_KEY_BASE64_URL_ENCODED
-echo 'TLS/endpoint key base64-encoded and URL-encoded:'
-echo $CA_CERT_BASE64_URL_ENCODED
+openssl genrsa -out ./certs/ca-rep.key 2048
+openssl req -new -x509 -config ca.cnf -key ./certs/ca-rep.key -out ./certs/ca-rep.crt -days 365 -batch
+openssl genrsa -out certs/node-rep.key 2048
+openssl req -new -config rep.cnf -key ./certs/node-rep.key -out ./certs/node-rep.csr -batch
+openssl ca -config ca.cnf -keyfile ./certs/ca-rep.key -cert ./certs/ca-rep.crt -policy signing_policy -extensions signing_node_req -out ./certs/node-rep.crt -outdir ./certs/ -in ./certs/node-rep.csr -batch
+openssl x509 -in ./certs/node-rep.crt -text | grep "X509v3 Subject Alternative Name" -A 1
+
+#REP_NODE_CERT_BASE64_URL_ENCODED=$(base64 -i ./certs/node-rep.crt | jq -R -r '@uri')
+#REP_NODE_KEY_BASE64_URL_ENCODED=$(base64 -i ./certs/node-rep.key | jq -R -r '@uri')
+#CA_CERT_BASE64_URL_ENCODED=$(base64 -i ./certs/ca-rep.crt | jq -R -r '@uri')
+#echo
+#echo 'TLS/endpoint certificate base64-encoded and URL-encoded:'
+#echo $REP_NODE_CERT_BASE64_URL_ENCODED
+#echo 'TLS/endpoint key base64-encoded and URL-encoded:'
+#echo $REP_NODE_KEY_BASE64_URL_ENCODED
+#echo 'TLS/endpoint key base64-encoded and URL-encoded:'
+#echo $CA_CERT_BASE64_URL_ENCODED
 
 echo
 echo "Begin of minimal downtime"
@@ -401,9 +403,8 @@ podman run \
   --targetConn "$PG_DSN_MOLT" \
   --stagingConn "$CRDB_DSN_STAGING" \
   --tlsCertificate /certs/node-rep.crt \
-  --tlsPrivateKey /certs/node-rep.key \
-  --disableAuthentication \
-# --tlsSelfSigned
+  --tlsPrivateKey /certs/node-rep.key 
+  #--tlsSelfSigned
 
 echo
 echo "Replicator logs"
@@ -417,18 +418,18 @@ openssl ecparam -out ./certs/ec.key -genkey -name prime256v1
 openssl ec -in ./certs/ec.key -pubout -out ./certs/ec.pub
 ECPUB=`cat ./certs/ec.pub`
 
-#podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "INSERT INTO _replicator.jwt_public_keys (public_key) VALUES (\$pub\$
-#$ECPUB
-#\$pub\$);
-#"
-#podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "select * from _replicator.jwt_public_keys;"
+podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "truncate table _replicator.jwt_public_keys;"
+podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "INSERT INTO _replicator.jwt_public_keys (public_key) VALUES (
+'$ECPUB'
+);"
+podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "select * from _replicator.jwt_public_keys;"
 
 podman run \
  -v ./certs:/certs \
  cockroachdb/replicator \
   make-jwt \
   -k /certs/ec.key \
-  -a sampledb \
+  -a sampledb.public \
   -o /certs/out.jwt
 JWT=`cat ./certs/out.jwt`
 
@@ -447,13 +448,20 @@ CLUSTER_LOGICAL_TIMESTAMP=$(podman exec crdb cockroach sql --host=$CRDB_IP --por
 echo
 echo "Cluster logical timestamp: $CLUSTER_LOGICAL_TIMESTAMP"
 
+openssl s_client -connect localhost:30004 \
+  -servername $REP_IP -showcerts </dev/null \
+  | awk '/BEGIN CERTIFICATE/{flag=1} flag; /END CERTIFICATE/{print; exit}' \
+  > ./certs/replicator-leaf.pem
+
+CA_B64=$(base64 -w0 -i ./certs/replicator-leaf.pem)
+
 echo
 echo 'Create changefeed to MOLT Replicator'
 pause
 
 # for pgsql/crdb sources, for failback, you need to include the schema as part of the URI
 podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE CHANGEFEED FOR TABLE orders, order_fills
- INTO 'webhook-https://$REP_IP:30004/sampledb/public?client_cert=$REP_NODE_CERT_BASE64_URL_ENCODED&client_key=$REP_NODE_KEY_BASE64_URL_ENCODED&ca_cert=$CA_CERT_BASE64_URL_ENCODED&insecure_tls_skip_verify=true' 
+ INTO 'webhook-https://$REP_IP:30004/sampledb/public?ca_cert=$CA_B64' 
  WITH updated, 
       resolved = '250ms', 
       min_checkpoint_frequency = '250ms', 

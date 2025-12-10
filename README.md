@@ -23,8 +23,9 @@ Make sure you have the following installed:
 
 - 🐍 Python 3.x with `venv` and required packages
 - 🐘 `podman` or `docker`
-- 🐓 `cockroachdb/cockroach` container image
+- 🪳 `cockroachdb/cockroach` container image
 - 🧬 `cockroachdb/molt` container image
+- 🐓 `postgres` container image
 
 > 💡 This guide uses `podman`, but Docker users can adapt commands as needed.
 

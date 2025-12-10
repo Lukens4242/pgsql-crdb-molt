@@ -30,7 +30,7 @@ Make sure you have the following installed:
 > 💡 This guide uses `podman`, but Docker users can adapt commands as needed.
 
 ---
-
+### NO LONGER NEEDED
 ### 2. 🐘 Build the sample order container
 `% podman build -t order-app:latest .`
 

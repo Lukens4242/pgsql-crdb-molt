@@ -213,6 +213,17 @@ podman run --rm \
   --schema /molt-data/postgres_schema.sql \
   --url "$CRDB_DSN_MOLT"
 
+echo "Inspect the converted schema..."
+pause
+echo
+grep "error" cockroach-collections-main/molt-bucket/postgres_schema.sql.1 -A 9
+echo
+echo "CockroachDB does not support \restrict and \unrestrict... comment those items out..."
+pause
+sed -i '' 's/^\\restrict/-- &/' ./cockroach-collections-main/molt-bucket/postgres_schema.sql.1
+sed -i '' 's/^\\unrestrict/-- &/' ./cockroach-collections-main/molt-bucket/postgres_schema.sql.1
+
+
 # ========================
 # 9. Apply schema to CockroachDB
 # ========================

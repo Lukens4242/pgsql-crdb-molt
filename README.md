@@ -10,7 +10,7 @@ This project demonstrates a full PostgreSQL → CockroachDB replication pipeline
 | Filename                | Description                                                                |
 |------------------------|----------------------------------------------------------------------------|
 | `orders_with_retry_fk.py` | Python script to generate, insert, and fill order data into PostgreSQL     |
-| `ffull_pipeline.sh`       | Full setup pipeline script: configures Postgres, converts schema, runs MOLT |
+| `full_pipeline.sh`       | Full setup pipeline script: configures Postgres, converts schema, runs MOLT |
 | `Dockerfile`              | Image definition for a container that runs `orders_with_retry_fk.py`        |
 
 ---

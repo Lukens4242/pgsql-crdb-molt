@@ -2,10 +2,6 @@
 #source ~/dbworkload-env/bin/activate
 set -euo pipefail
 
-
-# podman run --rm --network=host -v $(pwd):/app order-app --dsn "$PG_DSN" --generate --insert --fill 
-
-
 # ========================
 # Configuration
 # ========================
@@ -15,16 +11,19 @@ CONVERTED_SCHEMA="$SCHEMA_FILE.1"
 FETCH_LOG="fetch.log"
 VERIFY_LOG="verify.log"
 
+#Pick one of the two below to use and uncomment it.
+#DOCKER="docker" 
+DOCKER="podman"
+
 PG_IP="172.27.0.101"
 CRDB_IP="172.27.0.102"
 MOLT_IP="172.27.0.103"
 REP_IP="172.27.0.104"
-PG_DSN="postgres://admin:secret@localhost:5432/sampledb"
 PG_DSN_MOLT="postgres://admin:secret@pgsql_host:5432/sampledb?sslmode=disable"
 CRDB_DSN_MOLT="postgresql://root@crdb_host:26257/defaultdb?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
 CRDB_DSN_STAGING="postgresql://root@crdb_host:26257/_replicator?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
 CRDB_DSN_REPLICATOR="postgresql://root@$CRDB_IP:26257/defaultdb?sslcert=/certs/client.root.crt&sslkey=/certs/client.root.key&sslmode=verify-full&sslrootcert=/certs/ca.pem"
-CRDB_DSN_WORKLOAD="postgresql://root@localhost:26257/defaultdb?sslcert=./certs/client.root.crt&sslkey=./certs/client.root.key&sslmode=verify-full&sslrootcert=./certs/ca.crt"
+CRDB_DSN_WORKLOAD="postgresql://root@crdb_host:26257/defaultdb?sslcert=./certs/client.root.crt&sslkey=./certs/client.root.key&sslmode=verify-full&sslrootcert=./certs/ca.crt"
 
 pause() {
   echo ""
@@ -34,12 +33,12 @@ pause() {
 
 checkcounts() {
  echo "Postgresql count..." 
- podman exec -it postgres psql -U admin -d sampledb -c "SELECT 
+ $DOCKER exec -it postgres psql -U admin -d sampledb -c "SELECT 
   (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"
  echo "Cockroach count..."
- podman exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
+ $DOCKER exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
   (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"
@@ -50,7 +49,7 @@ verifyprintpretty() {
 }
 
 verify() {
-  podman run --rm -it \
+  $DOCKER run --rm -it \
   --name=molt_verify \
   --hostname=molt_verify \
   --ip=$MOLT_IP \
@@ -66,8 +65,8 @@ verify() {
 }
 
 generatedata() {
-  python3 orders_with_retry_fk.py --dsn "$1" --generate --insert --fill
-
+  #python3 orders_with_retry_fk.py --dsn "$1" --generate --insert --fill
+  $DOCKER run --rm --network=moltdemo -v $(pwd):/app order-app --dsn "$1" --generate --insert --fill 
 }
 
 # ========================
@@ -77,15 +76,15 @@ if [[ "${1:-}" == "--reset" ]]; then
   echo "🧹 Resetting environment..."
 
   echo "🛑 Stopping and removing containers..."
-  podman rm -f postgres 2>/dev/null || true
-  podman rm -f crdb 2>/dev/null || true
-  podman rm -f replicator_forward 2>/dev/null || true
-  podman rm -f replicator_reverse 2>/dev/null || true
-  podman network rm moltdemo 2>/dev/null || true
-  rm -f index.txt* serial.txt* ./certs/*
+  $DOCKER rm -f postgres 2>/dev/null || true
+  $DOCKER rm -f crdb 2>/dev/null || true
+  $DOCKER rm -f replicator_forward 2>/dev/null || true
+  $DOCKER rm -f replicator_reverse 2>/dev/null || true
+  $DOCKER network rm moltdemo 2>/dev/null || true
+  rm -f index.txt* serial.txt* ./certs/* 
 
   echo "🧼 Removing volume and files..."
-  podman volume rm pgdata 2>/dev/null || true
+  $DOCKER volume rm pgdata 2>/dev/null || true
   rm -f ./postgresql.conf ./orders_1m.csv
   rm -f "$SCHEMA_FILE" "$CONVERTED_SCHEMA" "$FETCH_LOG" "$VERIFY_LOG"
   echo "✅ Environment fully reset."
@@ -98,12 +97,12 @@ fi
 echo "🚀 [1/17] Starting Postgres container..."
 
 echo "Fetching latest docker images..."
-podman pull cockroachdb/molt
-podman pull cockroachdb/replicator
-podman pull cockroachdb/cockroach
-podman network create --driver=bridge --subnet=172.27.0.0/16 --ip-range=172.27.0.0/24 --gateway=172.27.0.1 moltdemo
+$DOCKER pull cockroachdb/molt
+$DOCKER pull cockroachdb/replicator
+$DOCKER pull cockroachdb/cockroach
+$DOCKER network create --driver=bridge --subnet=172.27.0.0/16 --ip-range=172.27.0.0/24 --gateway=172.27.0.1 moltdemo
 
-podman run --rm -d --name postgres -p 5432:5432 \
+$DOCKER run --rm -d --name postgres -p 5432:5432 \
   --hostname=pgsql_host \
   --ip=$PG_IP \
   --net=moltdemo \
@@ -122,7 +121,7 @@ echo "🛠️  [2/17] Configuring PostgreSQL for logical replication..."
 pause
 echo "📤 Copying postgresql.conf from container..."
 sleep 5
-podman cp postgres:/var/lib/postgresql/data/postgresql.conf ./postgresql.conf
+$DOCKER cp postgres:/var/lib/postgresql/data/postgresql.conf ./postgresql.conf
 
 echo "🔧 Editing WAL settings..."
 sed -i '' 's/^#*wal_level.*/wal_level = logical/' ./postgresql.conf
@@ -130,8 +129,8 @@ sed -i '' 's/^#*max_replication_slots.*/max_replication_slots = 4/' ./postgresql
 sed -i '' 's/^#*max_wal_senders.*/max_wal_senders = 4/' ./postgresql.conf
 
 echo "📥 Copying updated config back and restarting container..."
-podman cp ./postgresql.conf postgres:/var/lib/postgresql/data/postgresql.conf
-podman restart postgres
+$DOCKER cp ./postgresql.conf postgres:/var/lib/postgresql/data/postgresql.conf
+$DOCKER restart postgres
 sleep 5
 
 # ========================
@@ -150,7 +149,7 @@ PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c "SHOW max_wal_sender
 echo
 echo "📦 [4/17] Inserting test orders into Postgres..."
 pause
-generatedata "$PG_DSN"
+generatedata "$PG_DSN_MOLT"
 
 # ========================
 # 5. Dump schema from Postgres
@@ -159,7 +158,7 @@ echo
 echo "📄 [5/17] Dumping schema to $SCHEMA_FILE..."
 pause
 mkdir -p "$SCHEMA_DIR"
-podman exec -i postgres pg_dump -U admin -d sampledb --schema-only -t orders -t order_fills > "$SCHEMA_FILE"
+$DOCKER exec -i postgres pg_dump -U admin -d sampledb --schema-only -t orders -t order_fills > "$SCHEMA_FILE"
 
 # ========================
 # 6. Create CockroachDB Certificates
@@ -187,15 +186,15 @@ openssl x509 -in ./certs/ca.crt -out ./certs/ca.pem -outform PEM
 echo
 echo "🪵 [7/17] Starting CockroachDB container..."
 pause
-podman run -d -v "./certs:/cockroach/certs" --net=moltdemo --ip=$CRDB_IP --hostname=crdb_host --env COCKROACH_DATABASE=defaultdb --env COCKROACH_USER=root --env COCKROACH_PASSWORD=password --name=crdb -p 26257:26257 -p 8080:8080 cockroachdb/cockroach start-single-node --http-addr=crdb:8080
+$DOCKER run -d -v "./certs:/cockroach/certs" --net=moltdemo --ip=$CRDB_IP --hostname=crdb_host --env COCKROACH_DATABASE=defaultdb --env COCKROACH_USER=root --env COCKROACH_PASSWORD=password --name=crdb -p 26257:26257 -p 8080:8080 cockroachdb/cockroach start-single-node --http-addr=crdb:8080
 sleep 5
 
-until podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SELECT 1;" &>/dev/null; do
+until $DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SELECT 1;" &>/dev/null; do
   echo "⏳ Waiting for CockroachDB to become ready..."
   sleep 2
 done
-podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SET CLUSTER SETTING kv.rangefeed.enabled=true;"
-podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE DATABASE staging;"
+$DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SET CLUSTER SETTING kv.rangefeed.enabled=true;"
+$DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE DATABASE staging;"
 
 # ========================
 # 8. Convert schema with molt
@@ -203,7 +202,7 @@ podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --databa
 echo
 echo "🔁 [8/17] Converting schema for CockroachDB using molt..."
 pause
-podman run --rm \
+$DOCKER run --rm \
   -v "$SCHEMA_DIR:/molt-data" \
   -v "./certs:/certs" \
   --net=moltdemo \
@@ -230,7 +229,7 @@ sed -i '' 's/^\\unrestrict/-- &/' ./cockroach-collections-main/molt-bucket/postg
 echo
 echo "📥 [9/17] Applying converted schema to CockroachDB..."
 pause
-podman exec -i crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ < "$CONVERTED_SCHEMA"
+$DOCKER exec -i crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ < "$CONVERTED_SCHEMA"
 
 # ========================
 # 10. Verify CockroachDB schema
@@ -238,7 +237,7 @@ podman exec -i crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --dat
 echo
 echo "🔍 [10/17] Verifying CockroachDB schema..."
 pause
-podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SHOW CREATE ALL TABLES;"
+$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "SHOW CREATE ALL TABLES;"
 pause
 echo "Checking counts between postgres and CRDB..."
 echo "Postgres should have data in it and CRDB should not, as no transfer has occurred yet."
@@ -250,7 +249,7 @@ checkcounts
 echo
 echo "🚚 [11/17] Running molt fetch..."
 pause
-podman run --rm -it \
+$DOCKER run --rm -it \
   --name=molt_fetch \
   --net=moltdemo \
   --ip=$MOLT_IP \
@@ -274,7 +273,7 @@ podman run --rm -it \
 echo
 echo "🚚 [12/17] Running molt verify to compare the source data and CRDB data (any activity since the data load was done will result in false differences)..."
 pause
-podman run --rm -it \
+$DOCKER run --rm -it \
   --name=molt_verify \
   --hostname=molt_verify \
   --ip=$MOLT_IP \
@@ -305,7 +304,7 @@ checkcounts
 echo
 echo "📦 [13/17] Running workload that puts data into Postgres..."
 pause
-generatedata "$PG_DSN"
+generatedata "$PG_DSN_MOLT"
 
 echo
 echo "Checking counts between postgres and CRDB..."
@@ -318,7 +317,7 @@ checkcounts
 echo
 echo "🚚 [14/17] Running replication with replicator..."
 pause
-podman run \
+$DOCKER run \
   -d \
   --name=replicator_forward \
   --hostname=replicator \
@@ -389,14 +388,14 @@ openssl x509 -in ./certs/node-rep.crt -text | grep "X509v3 Subject Alternative N
 echo
 echo "Begin of minimal downtime"
 echo "Stopping Replicator forward migration"
-podman stop replicator_forward
+$DOCKER stop replicator_forward
 pause
 
 echo
 echo 'Start MOLT Replicator for the reverse migration'
 pause
 
-podman run \
+$DOCKER run \
  -d \
  --name=replicator_reverse \
  --hostname=replicator \
@@ -420,7 +419,7 @@ podman run \
 echo
 echo "Replicator logs"
 pause
-podman logs replicator_reverse
+$DOCKER logs replicator_reverse
 
 echo
 echo "Create JWT auth token"
@@ -429,13 +428,13 @@ openssl ecparam -out ./certs/ec.key -genkey -name prime256v1
 openssl ec -in ./certs/ec.key -pubout -out ./certs/ec.pub
 ECPUB=`cat ./certs/ec.pub`
 
-podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "truncate table _replicator.jwt_public_keys;"
-podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "INSERT INTO _replicator.jwt_public_keys (public_key) VALUES (
+$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "truncate table _replicator.jwt_public_keys;"
+$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "INSERT INTO _replicator.jwt_public_keys (public_key) VALUES (
 '$ECPUB'
 );"
-podman exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "select * from _replicator.jwt_public_keys;"
+$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "select * from _replicator.jwt_public_keys;"
 
-podman run \
+$DOCKER run \
  -v ./certs:/certs \
  cockroachdb/replicator \
   make-jwt \
@@ -446,7 +445,7 @@ JWT=`cat ./certs/out.jwt`
 
 echo 
 echo "Restarting replicator_reverse to read the new keys."
-podman restart replicator_reverse
+$DOCKER restart replicator_reverse
 sleep 5
 
 
@@ -454,7 +453,7 @@ echo
 echo 'Get the CockroachCB cluster logical timestamp for the changefeed cursor parameter'
 pause
 
-CLUSTER_LOGICAL_TIMESTAMP=$(podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ --format csv -e "SELECT cluster_logical_timestamp();" | tail -n -1)
+CLUSTER_LOGICAL_TIMESTAMP=$($DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ --format csv -e "SELECT cluster_logical_timestamp();" | tail -n -1)
 
 echo
 echo "Cluster logical timestamp: $CLUSTER_LOGICAL_TIMESTAMP"
@@ -471,7 +470,7 @@ echo 'Create changefeed to MOLT Replicator'
 pause
 
 # for pgsql/crdb sources, for failback, you need to include the schema as part of the URI
-podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE CHANGEFEED FOR TABLE orders, order_fills
+$DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE CHANGEFEED FOR TABLE orders, order_fills
  INTO 'webhook-https://$REP_IP:30004/sampledb/public?ca_cert=$CA_B64' 
  WITH updated, 
       resolved = '250ms', 
@@ -484,7 +483,7 @@ podman exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --databa
 echo
 echo "Display logs for replicator_reverse..."
 pause
-podman logs replicator_reverse
+$DOCKER logs replicator_reverse
 
 echo
 echo "Check the counts between postgres and CRDB.  They should be the same."
@@ -518,7 +517,7 @@ echo
 echo 'Look at MOLT Replicator logs again.'
 pause
 
-podman logs replicator_reverse
+$DOCKER logs replicator_reverse
 
 
 # ========================

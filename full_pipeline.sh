@@ -5,15 +5,16 @@ set -euo pipefail
 # ========================
 # Configuration
 # ========================
+
+#Pick one of the two below to use and uncomment it.
+#DOCKER="docker" 
+DOCKER="podman"
+
 SCHEMA_DIR="./cockroach-collections-main/molt-bucket"
 SCHEMA_FILE="$SCHEMA_DIR/postgres_schema.sql"
 CONVERTED_SCHEMA="$SCHEMA_FILE.1"
 FETCH_LOG="fetch.log"
 VERIFY_LOG="verify.log"
-
-#Pick one of the two below to use and uncomment it.
-#DOCKER="docker" 
-DOCKER="podman"
 
 PG_IP="172.27.0.101"
 CRDB_IP="172.27.0.102"

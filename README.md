@@ -1,4 +1,4 @@
-# 📦 Replicated Order Pipeline Demo
+# 📦 Postgres to CockroachDB Migration of Replicated Order Pipeline Demo
 
 
 This project demonstrates a full PostgreSQL → CockroachDB replication pipeline using [`molt`](https://github.com/cockroachdb/molt), with real-time logical replication of order data.  Many thanks to Arun Sankaranarayanan for help with failback authentication.

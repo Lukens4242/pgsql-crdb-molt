@@ -46,7 +46,7 @@ pause() {
 
 checkcounts() {
  echo "Postgresql count..." 
- $DOCKER exec -it postgres psql -U admin -d sampledb -c "SELECT 
+ $DOCKER exec -e PGPASSWORD=secret -i postgres psql -h $PG_IP -U admin -d sampledb -c "SELECT 
   (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"

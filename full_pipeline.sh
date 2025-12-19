@@ -144,14 +144,15 @@ fi
 # Get images and build network
 # ========================
 
-#TITLE="Fetching latest docker images and building network"
-#TEXT=""
-#CMD="$DOCKER pull cockroachdb/molt
+TITLE="Fetching latest docker images and building network"
+TEXT=""
+CMD="
+#$DOCKER pull cockroachdb/molt
 #$DOCKER pull cockroachdb/replicator
 #$DOCKER pull cockroachdb/cockroach
 $DOCKER network create --driver=bridge --subnet=172.27.0.0/16 --ip-range=172.27.0.0/24 --gateway=172.27.0.1 moltdemo
-#"
-#do_stage "$TITLE" "$TEXT" "$CMD"
+"
+do_stage "$TITLE" "$TEXT" "$CMD"
 
 # ========================
 # Start Postgres
@@ -199,9 +200,9 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # ========================
 TITLE="Verifying PostgreSQL replication settings"
 TEXT=""
-CMD="PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c \"SHOW wal_level;\"
-PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c \"SHOW max_replication_slots;\"
-PGPASSWORD=secret psql -h localhost -U admin -d sampledb -c \"SHOW max_wal_senders;\"
+CMD="$DOCKER exec -e PGPASSWORD=secret -i postgres psql -h $PG_IP -U admin -d sampledb -c \"SHOW wal_level;\"
+$DOCKER exec -e PGPASSWORD=secret -i postgres psql -h $PG_IP -U admin -d sampledb -c \"SHOW max_replication_slots;\"
+$DOCKER exec -e PGPASSWORD=secret -i postgres psql -h $PG_IP -U admin -d sampledb -c \"SHOW max_wal_senders;\"
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 

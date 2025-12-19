@@ -51,7 +51,7 @@ checkcounts() {
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"
  echo "Cockroach count..."
- $DOCKER exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP -e "SELECT 
+ $DOCKER exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP --port=26257 --user=root --database=defaultdb -e "SELECT 
   (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"

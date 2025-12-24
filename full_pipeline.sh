@@ -28,10 +28,63 @@ CRDB_DSN_STAGING="postgresql://root@crdb_host:26257/_replicator?sslcert=%2Fcerts
 CRDB_DSN_REPLICATOR="postgresql://root@$CRDB_IP:26257/defaultdb?sslcert=/certs/client.root.crt&sslkey=/certs/client.root.key&sslmode=verify-full&sslrootcert=/certs/ca.pem"
 CRDB_DSN_WORKLOAD="postgresql://root@crdb_host:26257/defaultdb?sslcert=./certs/client.root.crt&sslkey=./certs/client.root.key&sslmode=verify-full&sslrootcert=./certs/ca.crt"
 
-if [[ "${1:-}" == "--nopause" ]]; then
-  NOPAUSE=1
-  else
-  NOPAUSE=0
+NOPAUSE=0
+RESET=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --nopause|-n)
+            NOPAUSE=1
+            shift # Shift once to move past the current option
+            ;;
+        --width|-w)
+            if [[ -n "$2" ]] && [[ "$2" != -* ]]; then
+                TEXT_WIDTH="$2"
+                shift 2 # Shift twice: once for the option, once for its argument
+            else
+                echo "Error: --width requires an argument." >&2
+                exit 1
+            fi
+            ;;
+        --reset|-w)
+            RESET=1
+            shift
+            ;;
+        --) # End of all options
+            shift
+            ARGS+=( "${@}" ) # Collect all remaining arguments as positional arguments
+            break
+            ;;
+        -*)
+            echo "Error: Unknown option $1" >&2
+            exit 1
+            ;;
+        *) # Positional arguments
+            ARGS+=( "$1" )
+            shift
+            ;;
+    esac
+done
+
+# ========================
+# --reset option
+# ========================
+if [[ $RESET == "1" ]]; then
+  echo "🧹 Resetting environment..."
+
+  echo "🛑 Stopping and removing containers..."
+  $DOCKER rm -f postgres 2>/dev/null || true
+  $DOCKER rm -f crdb 2>/dev/null || true
+  $DOCKER rm -f replicator_forward 2>/dev/null || true
+  $DOCKER rm -f replicator_reverse 2>/dev/null || true
+  $DOCKER network rm moltdemo 2>/dev/null || true
+  rm -f index.txt* serial.txt* ./certs/* 
+
+  echo "🧼 Removing volume and files..."
+  $DOCKER volume rm pgdata 2>/dev/null || true
+  rm -f ./postgresql.conf ./orders_1m.csv
+  rm -f "$SCHEMA_FILE" "$CONVERTED_SCHEMA" "$FETCH_LOG" "$VERIFY_LOG"
+  echo "✅ Environment fully reset."
+  exit 0
 fi
 
 pause() {
@@ -117,28 +170,6 @@ do_stage() {
     pause
   fi
 }
-
-# ========================
-# --reset option
-# ========================
-if [[ "${1:-}" == "--reset" ]]; then
-  echo "🧹 Resetting environment..."
-
-  echo "🛑 Stopping and removing containers..."
-  $DOCKER rm -f postgres 2>/dev/null || true
-  $DOCKER rm -f crdb 2>/dev/null || true
-  $DOCKER rm -f replicator_forward 2>/dev/null || true
-  $DOCKER rm -f replicator_reverse 2>/dev/null || true
-  $DOCKER network rm moltdemo 2>/dev/null || true
-  rm -f index.txt* serial.txt* ./certs/* 
-
-  echo "🧼 Removing volume and files..."
-  $DOCKER volume rm pgdata 2>/dev/null || true
-  rm -f ./postgresql.conf ./orders_1m.csv
-  rm -f "$SCHEMA_FILE" "$CONVERTED_SCHEMA" "$FETCH_LOG" "$VERIFY_LOG"
-  echo "✅ Environment fully reset."
-  exit 0
-fi
 
 # ========================
 # Get images and build network
@@ -258,7 +289,7 @@ sleep 5
 do_stage "$TITLE" "$TEXT" "$CMD"
 
 TITLE=""
-TEXT="Making sure CockroachDB is ready."
+TEXT="Making sure CockroachDB is ready"
 CMD="until $DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"SELECT 1;\" &>/dev/null; do
   echo \"⏳ Waiting for CockroachDB to become ready...\"
   sleep 2
@@ -267,7 +298,7 @@ done
 do_stage "$TITLE" "$TEXT" "$CMD"
 
 TITLE=""
-TEXT="Enabling rangefeeds and creating a staging DB."
+TEXT="Enabling rangefeeds and creating a staging DB"
 CMD="$DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"SET CLUSTER SETTING kv.rangefeed.enabled=true;\"
 $DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"CREATE DATABASE staging;\"
 "

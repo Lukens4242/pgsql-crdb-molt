@@ -179,9 +179,9 @@ do_stage() {
 TITLE="Fetching latest docker images and building network"
 TEXT=""
 CMD="
-#$DOCKER pull cockroachdb/molt
-#$DOCKER pull cockroachdb/replicator
-#$DOCKER pull cockroachdb/cockroach
+$DOCKER pull cockroachdb/molt
+$DOCKER pull cockroachdb/replicator
+$DOCKER pull cockroachdb/cockroach
 $DOCKER network create --driver=bridge --subnet=172.27.0.0/16 --ip-range=172.27.0.0/24 --gateway=172.27.0.1 moltdemo
 "
 do_stage "$TITLE" "$TEXT" "$CMD"

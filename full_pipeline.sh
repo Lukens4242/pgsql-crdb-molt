@@ -179,9 +179,9 @@ do_stage() {
 TITLE="Fetching latest docker images and building network"
 TEXT=""
 CMD="
-$DOCKER pull cockroachdb/molt
-$DOCKER pull cockroachdb/replicator
-$DOCKER pull cockroachdb/cockroach
+#$DOCKER pull cockroachdb/molt
+#$DOCKER pull cockroachdb/replicator
+#$DOCKER pull cockroachdb/cockroach
 $DOCKER network create --driver=bridge --subnet=172.27.0.0/16 --ip-range=172.27.0.0/24 --gateway=172.27.0.1 moltdemo
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
@@ -380,8 +380,9 @@ CMD="$DOCKER run --rm -it \
   --table-handling truncate-if-exists \
   --direct-copy \
   --pglogical-replication-slot-name replication_slot \
+  --pglogical-publication-and-slot-drop-and-recreate \
   --mode data-load \
-  --logging=debug --replicator-flags \"-v\" | tee \"$FETCH_LOG\"
+  --logging=debug | tee \"$FETCH_LOG\"
   "
 do_stage "$TITLE" "$TEXT" "$CMD"
 

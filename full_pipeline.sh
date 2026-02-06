@@ -439,7 +439,7 @@ pause
 # Run replicator for replication... 
 # ========================
 TITLE="Enabling replication with replicator"
-TEXT="Replicator does the real time replication from postgres to CockroachDB.  This is done by using the replication slots we configured earlier to stream any postgres data changes into replicator.  Replicator then stages and applies those data mutations to CockroachDB."
+TEXT="Replicator does the real time replication from postgres to CockroachDB.  This is done by using the replication slots we configured earlier to stream any postgres data changes into replicator.  Replicator then stages and applies those data mutations to CockroachDB.  When coming from postgres, the target scchema in CockroachDB needs to include <database>.<schema>"
 CMD="$DOCKER run \
   -d \
   --name=replicator_forward \

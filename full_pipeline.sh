@@ -560,7 +560,7 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 
 TITLE=""
 TEXT="Now we will use replicator to generate the JWT auth token we will use in the changefeed later on to stream data from CockroachDB to replicator.  This is the token created from our secret EC key."
-CMD="$DOCKER run \
+CMD="$DOCKER run --rm \
  -v ./certs:/certs \
  cockroachdb/replicator \
   make-jwt \

@@ -10,13 +10,14 @@ set -euo pipefail
 #DOCKER="docker" 
 DOCKER="podman"
 
-SCHEMA_DIR="./cockroach-collections-main/molt-bucket"
+SCHEMA_DIR="./molt-bucket"
 SCHEMA_FILE="$SCHEMA_DIR/postgres_schema.sql"
 CONVERTED_SCHEMA="$SCHEMA_FILE.1"
 FETCH_LOG="fetch.log"
 VERIFY_LOG="verify.log"
 TEXT_WIDTH="80"
-TOTALSTAGES="24"
+TOTALSTAGES="46"
+SKIPTOSTAGE=1
 
 PG_IP="172.27.0.101"
 CRDB_IP="172.27.0.102"
@@ -42,6 +43,15 @@ while [[ $# -gt 0 ]]; do
                 shift 2 # Shift twice: once for the option, once for its argument
             else
                 echo "Error: --width requires an argument." >&2
+                exit 1
+            fi
+            ;;
+        --skipto|-s)
+            if [[ -n "$2" ]] && [[ "$2" != -* ]]; then
+                SKIPTOSTAGE="$2"
+                shift 2 # Shift twice: once for the option, once for its argument
+            else
+                echo "Error: --skipto requires an argument." >&2
                 exit 1
             fi
             ;;
@@ -77,12 +87,13 @@ if [[ $RESET == "1" ]]; then
   $DOCKER rm -f replicator_forward 2>/dev/null || true
   $DOCKER rm -f replicator_reverse 2>/dev/null || true
   $DOCKER network rm moltdemo 2>/dev/null || true
-  rm -f index.txt* serial.txt* ./certs/* 
+  rm -f index.txt* serial.txt* 
 
   echo "🧼 Removing volume and files..."
   $DOCKER volume rm pgdata 2>/dev/null || true
   rm -f ./postgresql.conf ./orders_1m.csv
   rm -f "$SCHEMA_FILE" "$CONVERTED_SCHEMA" "$FETCH_LOG" "$VERIFY_LOG"
+  rm -rf ./certs/ ./molt-bucket/
   echo "✅ Environment fully reset."
   exit 0
 fi
@@ -146,12 +157,17 @@ print_cmd() {
 
 STAGE=1
 print_title() {
-  echo "🚀 [$STAGE/$TOTALSTAGES] $1..."
   echo
+  echo "🚀 [$STAGE/$TOTALSTAGES] $1..."
   ((STAGE++))
 }
 
 do_stage() {
+  if [[ ${STAGE} -lt ${SKIPTOSTAGE} ]]; then
+    print_title "$1"
+    echo 'Skipping stage '
+    return
+  fi
   if [[ -n "$1" ]]; then
     print_title "$1"
   fi  
@@ -165,10 +181,10 @@ do_stage() {
     echo
     print_cmd "$3"
     pause
-    echo "--Running--"
+    echo "-------------- Running -------------"
     eval "$3"
-    echo "--Done--"
-    pause
+    echo "--------------- Done ---------------"
+    #pause
   fi
 }
 
@@ -218,7 +234,7 @@ sed -i '' 's/^#*max_wal_senders.*/max_wal_senders = 4/' ./postgresql.conf
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Restart Postgres"
 TEXT="📥 Copying updated config back and restarting container..."
 CMD="$DOCKER cp ./postgresql.conf postgres:/var/lib/postgresql/data/postgresql.conf
 $DOCKER restart postgres
@@ -243,17 +259,17 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # ========================
 TITLE="Inserting test orders into Postgres"
 TEXT="This sample orders application will insert a number of records into a pair of tables in the postgres DB."
-CMD=""
+CMD="generatedata $PG_DSN_MOLT"
 do_stage "$TITLE" "$TEXT" "$CMD"
-generatedata "$PG_DSN_MOLT"
-pause
 
 # ========================
 # Dump schema from Postgres
 # ========================
 TITLE="Dumping schema to $SCHEMA_FILE"
 TEXT="This action will export the schema from postgres.  In future steps we will convert the schema for CockroachDB."
-CMD="mkdir -p \"$SCHEMA_DIR\"
+CMD="
+rm -rf \"$SCHEMA_DIR\"
+mkdir -p \"$SCHEMA_DIR\"
 $DOCKER exec -i postgres pg_dump -U admin -d sampledb --schema-only -t orders -t order_fills > \"$SCHEMA_FILE\"
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
@@ -263,7 +279,8 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # ========================
 TITLE="Creating CockroachDB certificates"
 TEXT="This will create the keys, certificates, and pem files needed to start CockroachDB."
-CMD="rm -f index.txt* serial.txt* ./certs/*
+CMD="rm -rf index.txt serial.txt certs
+mkdir -p certs
 openssl genrsa -out ./certs/ca.key 2048
 openssl req -new -x509 -config ca.cnf -key ./certs/ca.key -out ./certs/ca.crt -days 365 -batch
 touch index.txt
@@ -289,7 +306,7 @@ sleep 5
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="CRDB Ready"
 TEXT="Making sure CockroachDB is ready"
 CMD="until $DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"SELECT 1;\" &>/dev/null; do
   echo \"⏳ Waiting for CockroachDB to become ready...\"
@@ -298,7 +315,7 @@ done
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="CRDB Prep"
 TEXT="Enabling rangefeeds and creating a staging DB"
 CMD="$DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"SET CLUSTER SETTING kv.rangefeed.enabled=true;\"
 $DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"CREATE DATABASE staging;\"
@@ -322,16 +339,16 @@ CMD="$DOCKER run --rm \
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Inspect Schema"
 TEXT="Inspect the converted schema.  This will scan the output from MOLT convert for any errors."
-CMD="grep \"error\" cockroach-collections-main/molt-bucket/postgres_schema.sql.1 -A 9
+CMD="grep \"error\" molt-bucket/postgres_schema.sql.1 -A 9
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Remove unsupported commands"
 TEXT="CockroachDB does not support \restrict and \unrestrict.  So we need to remove those commands before we use the schema in CockroachDB."
-CMD="sed -i '' 's/^\\\\restrict/-- &/' ./cockroach-collections-main/molt-bucket/postgres_schema.sql.1
-sed -i '' 's/^\\\\unrestrict/-- &/' ./cockroach-collections-main/molt-bucket/postgres_schema.sql.1
+CMD="sed -i '' 's/^\\\\restrict/-- &/' ./molt-bucket/postgres_schema.sql.1
+sed -i '' 's/^\\\\unrestrict/-- &/' ./molt-bucket/postgres_schema.sql.1
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
@@ -353,12 +370,10 @@ CMD="$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=roo
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Check Counts"
 TEXT="Checking counts between postgres and CockroachDB.  Postgres should have data in it since we previously loaded orders into it and CockroachDB should not, as no transfer has occurred yet."
-CMD=""
+CMD="checkcounts"
 do_stage "$TITLE" "$TEXT" "$CMD"
-checkcounts
-pause
 
 # ========================
 # Run molt fetch 
@@ -407,40 +422,35 @@ CMD="$DOCKER run --rm -it \
   "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Pretty print Verify output"
 TEXT="Pretty print the MOLT Verify output."
 CMD="cat $VERIFY_LOG | tail -n +2 | jq"
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Check Counts"
 TEXT="Checking counts between postgres and CockroachDB.  Postgres should have data in it and CockroachDB should have the same count as long as no new data has been generated since we ran MOLT fetch."
-CMD=""
-checkcounts
-pause
+CMD="checkcounts"
+do_stage "$TITLE" "$TEXT" "$CMD"
 
 # ========================
 # Populate sample data
 # ========================
 TITLE="Running workload that puts additional data into postgres"
 TEXT="We will now insert more data into postgres."
-CMD=""
+CMD="generatedata $PG_DSN_MOLT"
 do_stage "$TITLE" "$TEXT" "$CMD"
-generatedata "$PG_DSN_MOLT"
-pause
 
-TITLE=""
+TITLE="Check Counts"
 TEXT="Checking counts between postgres and CockroachDB.  Postgres should have more data in it than CockroachDB, as real time replication has not been started yet."
-CMD=""
+CMD="checkcounts"
 do_stage "$TITLE" "$TEXT" "$CMD"
-checkcounts
-pause
 
 # ========================
 # Run replicator for replication... 
 # ========================
 TITLE="Enabling replication with replicator"
 TEXT="Replicator does the real time replication from postgres to CockroachDB.  This is done by using the replication slots we configured earlier to stream any postgres data changes into replicator.  Replicator then stages and applies those data mutations to CockroachDB.  When coming from postgres, the target scchema in CockroachDB needs to include <database>.<schema>"
-CMD="$DOCKER run \
+CMD="$DOCKER run --rm \
   -d \
   --name=replicator_forward \
   --hostname=replicator \
@@ -461,25 +471,20 @@ sleep 10
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Check Counts"
 TEXT="We will view the MOLT Replicator log output; checking counts between postgres and CockroachDB.  Once replication has caught up, both Postgres and CockroachDB should have the same row counts."
-CMD=""
-checkcounts
-pause
+CMD="checkcounts"
+do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="MOLT Verify"
 TEXT="Running molt verify to compare the source data and CockroachDB data (any activity since the last set of data was loaded will result in false differences)."
-CMD=""
+CMD="verify"
 do_stage "$TITLE" "$TEXT" "$CMD"
-verify
-pause
 
-TITLE=""
+TITLE="Pretty print Verify output"
 TEXT="Pretty print MOLT Verify output."
-CMD=""
+CMD="verifyprintpretty"
 do_stage "$TITLE" "$TEXT" "$CMD"
-verifyprintpretty
-pause
 
 # ========================
 # Stop app
@@ -488,7 +493,6 @@ TITLE="Stop the workload generating data if it is still running."
 TEXT="Here we will prepare for minimal scheduled downtime, switch our application to use CockroachDB instead of postgres, and put replicator into failback mode in case we discover a future problem."
 CMD=""
 do_stage "$TITLE" "$TEXT" "$CMD"
-pause
 
 # ========================
 # Start MOLT in failback mode
@@ -512,7 +516,7 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 
 TITLE="Start MOLT Replicator in failback mode."
 TEXT="Replicator in failback mode is needed just in case issues are discovered with the migration later on."
-CMD="$DOCKER run \
+CMD="$DOCKER run --rm \
  -d \
  --name=replicator_reverse \
  --hostname=replicator \
@@ -534,9 +538,9 @@ CMD="$DOCKER run \
   "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Inspect logs"
 TEXT="Let's inspect the replicator logs."
-CMD="$DOCKER logs replicator_reverse
+CMD="$DOCKER logs replicator_reverse|tail -20
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
@@ -548,7 +552,7 @@ openssl ec -in ./certs/ec.key -pubout -out ./certs/ec.pub
 do_stage "$TITLE" "$TEXT" "$CMD"
 ECPUB=`cat ./certs/ec.pub`
 
-TITLE=""
+TITLE="Certs stuff"
 TEXT="Now we clear the JWT table that replicator will use and insert our EC public key."
 CMD="$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"truncate table _replicator.jwt_public_keys;\"
 $DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"INSERT INTO _replicator.jwt_public_keys (public_key) VALUES (
@@ -558,7 +562,7 @@ $DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --d
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Generate JWT"
 TEXT="Now we will use replicator to generate the JWT auth token we will use in the changefeed later on to stream data from CockroachDB to replicator.  This is the token created from our secret EC key."
 CMD="$DOCKER run --rm \
  -v ./certs:/certs \
@@ -571,28 +575,28 @@ CMD="$DOCKER run --rm \
 do_stage "$TITLE" "$TEXT" "$CMD"
 JWT=`cat ./certs/out.jwt`
 
-TITLE=""
+TITLE="Restart Replicator"
 TEXT="Restarting replicator_reverse to read the new keys.  If we were to wait instead of restarting replicator, it would reread the keys each minute."
 CMD="$DOCKER restart replicator_reverse
 sleep 5
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Get cluster logical timestamp"
 TEXT="Now we will get the CockroachCB cluster logical timestamp for the changefeed cursor parameter.  This will allow the changefeed to begin from the moment our forward migration was stopped.
 
 My next command...
 
 $DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ --format csv -e \"SELECT cluster_logical_timestamp();\" | tail -n -1
 "
-CMD=""
-do_stage "$TITLE" "$TEXT" "$CMD"
-CLUSTER_LOGICAL_TIMESTAMP=$($DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ --format csv -e "SELECT cluster_logical_timestamp();" | tail -n -1)
+CMD='
 echo $CLUSTER_LOGICAL_TIMESTAMP
 echo
-pause
+'
+export CLUSTER_LOGICAL_TIMESTAMP=$($DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ --format csv -e "SELECT cluster_logical_timestamp();" | tail -n -1)
+do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
+TITLE="Get Replicator Certs"
 TEXT="Now we will connect to replicator and get the leaf key and base64 encode it for use in the changefeed."
 CMD="openssl s_client -connect localhost:30004 \
   -servername $REP_IP -showcerts </dev/null \
@@ -618,30 +622,28 @@ $DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --datab
       webhook_sink_config = '{\\"Flush\\":{\\"Bytes\\":1048576,\\"Frequency\\":\\"1s\\"}}', \
       webhook_auth_header = 'Bearer $JWT';\"
 "
-CMD=""
-do_stage "$TITLE" "$TEXT" "$CMD"
-$DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e "CREATE CHANGEFEED FOR TABLE orders, order_fills
+CMD="
+$DOCKER exec crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"CREATE CHANGEFEED FOR TABLE orders, order_fills
  INTO 'webhook-https://$REP_IP:30004/sampledb/public?ca_cert=$CA_B64' 
  WITH updated, 
       resolved = '250ms', 
       min_checkpoint_frequency = '250ms', 
       initial_scan = 'no', 
       cursor = '$CLUSTER_LOGICAL_TIMESTAMP', 
-      webhook_sink_config = '{\"Flush\":{\"Bytes\":1048576,\"Frequency\":\"1s\"}}', \
-      webhook_auth_header = 'Bearer $JWT';"
-
-TITLE=""
-TEXT="Display logs for replicator_reverse."
-CMD="$DOCKER logs replicator_reverse
+      webhook_auth_header = 'Bearer $JWT';\"
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE=""
-TEXT="Check the counts between postgres and CockroachDB.  They should be the same."
-CMD=""
+TITLE="Replicator Logs"
+TEXT="Display logs for replicator_reverse."
+CMD="$DOCKER logs replicator_reverse|tail -20
+"
 do_stage "$TITLE" "$TEXT" "$CMD"
-checkcounts
-pause
+
+TITLE="Check Counts"
+TEXT="Check the counts between postgres and CockroachDB.  They should be the same."
+CMD="checkcounts"
+do_stage "$TITLE" "$TEXT" "$CMD"
 
 TITLE="---End of downtime---"
 TEXT="Reverse replication is set up.  Then this is where you would configure the application to connect to CockroacDB and restart the workload.  Perform your final go/no-go tests.
@@ -649,25 +651,23 @@ TEXT="Reverse replication is set up.  Then this is where you would configure the
 CMD=""
 do_stage "$TITLE" "$TEXT" "$CMD"
 
-TITLE="Show reverse replication is working by inserting data into CockroachDB and letting it replicate into postgres."
-TEXT=""
-CMD=""
-do_stage "$TITLE" "$TEXT" "$CMD"
+TITLE="Insert data into CRDB"
+TEXT="Show reverse replication is working by inserting data into CockroachDB and letting it replicate into postgres."
+CMD='
 generatedata "$CRDB_DSN_WORKLOAD"
-echo "Sleep 10 seconds to let the change propagate to postgres."
+echo Sleep 10 seconds to let the change propagate to postgres.
 sleep 10
-pause
-
-TITLE=""
-TEXT="Checking counts between postgres and CockroachDB."
-CMD=""
+'
 do_stage "$TITLE" "$TEXT" "$CMD"
-checkcounts
-pause
 
-TITLE=""
+TITLE="Check Counts"
+TEXT="Checking counts between postgres and CockroachDB."
+CMD="checkcounts"
+do_stage "$TITLE" "$TEXT" "$CMD"
+
+TITLE="Replicator Logs"
 TEXT="Inspect the MOLT Replicator logs again."
-CMD="$DOCKER logs replicator_reverse"
+CMD="$DOCKER logs replicator_reverse 2>&1|tail -20"
 do_stage "$TITLE" "$TEXT" "$CMD"
 
 # ========================

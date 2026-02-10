@@ -524,7 +524,7 @@ CMD="$DOCKER run --rm \
  --net=moltdemo \
  -p 30004:30004 \
  -v ./certs:/certs \
- cockroachdb/replicator:V1.3.0 \
+ cockroachdb/replicator:v1.3.0 \
   start \
   -v \
   --stagingCreateSchema \

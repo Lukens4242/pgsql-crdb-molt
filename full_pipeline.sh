@@ -29,8 +29,6 @@ CRDB_DSN_STAGING="postgresql://root@crdb_host:26257/_replicator?sslcert=%2Fcerts
 CRDB_DSN_REPLICATOR="postgresql://root@$CRDB_IP:26257/defaultdb?sslcert=/certs/client.root.crt&sslkey=/certs/client.root.key&sslmode=verify-full&sslrootcert=/certs/ca.pem"
 CRDB_DSN_WORKLOAD="postgresql://root@crdb_host:26257/defaultdb?sslcert=./certs/client.root.crt&sslkey=./certs/client.root.key&sslmode=verify-full&sslrootcert=./certs/ca.crt"
 
-mkdir -p certs
-
 NOPAUSE=0
 RESET=0
 while [[ $# -gt 0 ]]; do

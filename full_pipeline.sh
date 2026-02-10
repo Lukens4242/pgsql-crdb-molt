@@ -134,7 +134,7 @@ verify() {
   --net=moltdemo \
   -v "$SCHEMA_DIR:/molt-bucket" \
   -v "./certs:/certs" \
-  cockroachdb/molt \
+  cockroachdb/molt:1.3.5 \
   verify \
   --table-filter '[^_].*' \
   --source "$PG_DSN_MOLT" \
@@ -195,9 +195,9 @@ do_stage() {
 TITLE="Fetching latest docker images and building network"
 TEXT=""
 CMD="
-#$DOCKER pull cockroachdb/molt
-#$DOCKER pull cockroachdb/replicator
-#$DOCKER pull cockroachdb/cockroach
+#$DOCKER pull cockroachdb/molt:1.3.5
+#$DOCKER pull cockroachdb/replicator:v1.3.0
+#$DOCKER pull cockroachdb/cockroach:v24.3.25
 $DOCKER network create --driver=bridge --subnet=172.27.0.0/16 --ip-range=172.27.0.0/24 --gateway=172.27.0.1 moltdemo
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
@@ -301,7 +301,7 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # ========================
 TITLE="Starting CockroachDB container"
 TEXT=""
-CMD="$DOCKER run -d -v \"./certs:/cockroach/certs\" --net=moltdemo --ip=$CRDB_IP --hostname=crdb_host --env COCKROACH_DATABASE=defaultdb --env COCKROACH_USER=root --env COCKROACH_PASSWORD=password --name=crdb -p 26257:26257 -p 8080:8080 cockroachdb/cockroach start-single-node --http-addr=crdb:8080
+CMD="$DOCKER run -d -v \"./certs:/cockroach/certs\" --net=moltdemo --ip=$CRDB_IP --hostname=crdb_host --env COCKROACH_DATABASE=defaultdb --env COCKROACH_USER=root --env COCKROACH_PASSWORD=password --name=crdb -p 26257:26257 -p 8080:8080 cockroachdb/cockroach:v24.3.25 start-single-node --http-addr=crdb:8080
 sleep 5
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
@@ -333,7 +333,7 @@ CMD="$DOCKER run --rm \
   --net=moltdemo \
   --hostname=molt_convert \
   --ip=$MOLT_IP \
-  cockroachdb/molt convert postgres \
+  cockroachdb/molt:1.3.5 convert postgres \
   --schema /molt-data/postgres_schema.sql \
   --url \"$CRDB_DSN_MOLT\"
 "
@@ -387,7 +387,7 @@ CMD="$DOCKER run --rm -it \
   --hostname=molt_fetch \
   -v \"$SCHEMA_DIR:/molt-bucket\" \
   -v \"./certs:/certs\" \
-  cockroachdb/molt \
+  cockroachdb/molt:1.3.5 \
   fetch \
   --source \"$PG_DSN_MOLT\" \
   --target \"$CRDB_DSN_MOLT\" \
@@ -413,7 +413,7 @@ CMD="$DOCKER run --rm -it \
   --net=moltdemo \
   -v \"$SCHEMA_DIR:/molt-bucket\" \
   -v \"./certs:/certs\" \
-  cockroachdb/molt \
+  cockroachdb/molt:1.3.5 \
   verify \
   --table-filter '[^_].*' \
   --source \"$PG_DSN_MOLT\" \
@@ -457,7 +457,7 @@ CMD="$DOCKER run --rm \
   --ip=$REP_IP \
   --net=moltdemo \
   -v "./certs:/certs" \
-  cockroachdb/replicator \
+  cockroachdb/replicator:v1.3.0 \
   pglogical \
   -v \
   --stagingCreateSchema \
@@ -524,7 +524,7 @@ CMD="$DOCKER run --rm \
  --net=moltdemo \
  -p 30004:30004 \
  -v ./certs:/certs \
- cockroachdb/replicator \
+ cockroachdb/replicator:V1.3.0 \
   start \
   -v \
   --stagingCreateSchema \
@@ -566,7 +566,7 @@ TITLE="Generate JWT"
 TEXT="Now we will use replicator to generate the JWT auth token we will use in the changefeed later on to stream data from CockroachDB to replicator.  This is the token created from our secret EC key."
 CMD="$DOCKER run --rm \
  -v ./certs:/certs \
- cockroachdb/replicator \
+ cockroachdb/replicator:v1.3.0 \
   make-jwt \
   -k /certs/ec.key \
   -a sampledb.public \

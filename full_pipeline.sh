@@ -55,7 +55,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
-        --reset|-w)
+        --reset|-r)
             RESET=1
             shift
             ;;

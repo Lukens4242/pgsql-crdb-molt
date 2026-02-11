@@ -78,6 +78,13 @@ class Orders:
         self.total_orders = 0
         self.progress_lock = threading.Lock()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close_pool()
+        return False
+
     def get_conn(self):
         retries = 0
         max_retries = 5
@@ -287,15 +294,14 @@ class Orders:
         print("✅ All orders filled.")
 
 def main():
-    orders = Orders(DB_URI)
-    orders.setup_schema()
-    if opt.generate:
-        orders.generate_and_save_orders()
-    if opt.insert:
-        orders.insert_orders_from_file()
-    if opt.fill:
-        orders.fill_orders_parallel_from_file()
-    orders.close_pool()
+    with Orders(DB_URI) as orders:
+        orders.setup_schema()
+        if opt.generate:
+            orders.generate_and_save_orders()
+        if opt.insert:
+            orders.insert_orders_from_file()
+        if opt.fill:
+            orders.fill_orders_parallel_from_file()
 
 if __name__ == "__main__":
     main()

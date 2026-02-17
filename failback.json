@@ -1,6 +1,6 @@
 {
     "host": "host.docker.internal",
     "port": 30005,
+    "_comment": "WARNING: insecure_tls_skip_verify is for local demo only. Never use in production.",
     "sink_query_parameters": "insecure_tls_skip_verify=true"
 }
-

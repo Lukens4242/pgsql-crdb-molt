@@ -89,6 +89,7 @@ class Orders:
         retries = 0
         max_retries = 5
         while retries <= max_retries:
+            conn = None
             try:
                 conn = self.pool.getconn()
                 if conn.closed:
@@ -97,7 +98,8 @@ class Orders:
                     cur.execute("SELECT 1")
                 return conn
             except Exception as e:
-                self.pool.putconn(conn, close=True)
+                if conn is not None:
+                    self.pool.putconn(conn, close=True)
                 retries += 1
                 wait = 0.1 * (2 ** retries)
                 print(f"⚠️ Retrying get_conn() in {wait:.2f}s due to connection error (attempt {retries})")
@@ -262,11 +264,9 @@ class Orders:
 
     def timed_fill(self, args):
         order_id, account_id = args
-        def fill_fn():
-            self.fill_order(order_id, account_id)
-            with self.progress_lock:
-                self.processed_count += 1
-        run_with_retries(fill_fn)
+        self.fill_order(order_id, account_id)
+        with self.progress_lock:
+            self.processed_count += 1
 
     def fill_orders_parallel_from_file(self):
         print(f"🛠️ Filling orders in parallel with {THREADS} threads...")

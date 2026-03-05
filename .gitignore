@@ -5,4 +5,4 @@ certs/*
 serial.*
 cockroach*.sql*
 postgresql.conf
-postgres_schema.sql*
+molt-bucket/

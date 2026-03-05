@@ -6,8 +6,7 @@ set -euo pipefail
 # Configuration
 # ========================
 
-#Pick one of the two below to use and uncomment it.
-#DOCKER="docker" 
+# Container runtime: override with --docker or --podman flags below.
 DOCKER="podman"
 
 SCHEMA_DIR="./molt-bucket"
@@ -16,13 +15,13 @@ CONVERTED_SCHEMA="$SCHEMA_FILE.1"
 FETCH_LOG="fetch.log"
 VERIFY_LOG="verify.log"
 TEXT_WIDTH="80"
-TOTALSTAGES="46"
 SKIPTOSTAGE=1
 
 PG_IP="172.27.0.101"
 CRDB_IP="172.27.0.102"
 MOLT_IP="172.27.0.103"
 REP_IP="172.27.0.104"
+# WARNING: Demo-only credentials. Use env vars or a secrets manager in production.
 PG_DSN_MOLT="postgres://admin:secret@pgsql_host:5432/sampledb?sslmode=disable"
 CRDB_DSN_MOLT="postgresql://root@crdb_host:26257/defaultdb?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
 CRDB_DSN_STAGING="postgresql://root@crdb_host:26257/_replicator?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
@@ -31,25 +30,34 @@ CRDB_DSN_WORKLOAD="postgresql://root@crdb_host:26257/defaultdb?sslcert=./certs/c
 
 NOPAUSE=0
 RESET=0
+ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --nopause|-n)
             NOPAUSE=1
-            shift # Shift once to move past the current option
+            shift
+            ;;
+        --docker)
+            DOCKER="docker"
+            shift
+            ;;
+        --podman)
+            DOCKER="podman"
+            shift
             ;;
         --width|-w)
-            if [[ -n "$2" ]] && [[ "$2" != -* ]]; then
+            if [[ -n "${2:-}" ]] && [[ "$2" != -* ]]; then
                 TEXT_WIDTH="$2"
-                shift 2 # Shift twice: once for the option, once for its argument
+                shift 2
             else
                 echo "Error: --width requires an argument." >&2
                 exit 1
             fi
             ;;
         --skipto|-s)
-            if [[ -n "$2" ]] && [[ "$2" != -* ]]; then
+            if [[ -n "${2:-}" ]] && [[ "$2" != -* ]]; then
                 SKIPTOSTAGE="$2"
-                shift 2 # Shift twice: once for the option, once for its argument
+                shift 2
             else
                 echo "Error: --skipto requires an argument." >&2
                 exit 1
@@ -59,16 +67,16 @@ while [[ $# -gt 0 ]]; do
             RESET=1
             shift
             ;;
-        --) # End of all options
+        --)
             shift
-            ARGS+=( "${@}" ) # Collect all remaining arguments as positional arguments
+            ARGS+=( "${@}" )
             break
             ;;
         -*)
             echo "Error: Unknown option $1" >&2
             exit 1
             ;;
-        *) # Positional arguments
+        *)
             ARGS+=( "$1" )
             shift
             ;;
@@ -98,24 +106,42 @@ if [[ $RESET == "1" ]]; then
   exit 0
 fi
 
+# Cross-platform sed in-place edit (macOS vs GNU/Linux)
+sed_i() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i '' "$@"
+  else
+    sed -i "$@"
+  fi
+}
+
+# Cross-platform base64 encode without line wrapping
+b64_encode() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    base64 -i "$1"
+  else
+    base64 -w0 "$1"
+  fi
+}
+
 pause() {
   echo ""
   if [[ $NOPAUSE == "1" ]]; then
       sleep 1
     else
-      read -p "⏸️  Press [Enter] to continue..." 
+      read -p "⏸️  Press [Enter] to continue..."
   fi
   echo ""
 }
 
 checkcounts() {
- echo "Postgresql count..." 
- $DOCKER exec -e PGPASSWORD=secret -i postgres psql -h $PG_IP -U admin -d sampledb -c "SELECT 
+ echo "Postgresql count..."
+ $DOCKER exec -e PGPASSWORD=secret -i postgres psql -h $PG_IP -U admin -d sampledb -c "SELECT
   (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"
  echo "Cockroach count..."
- $DOCKER exec -it crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP --port=26257 --user=root --database=defaultdb -e "SELECT 
+ $DOCKER exec -i crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP --port=26257 --user=root --database=defaultdb -e "SELECT
   (SELECT COUNT(1) FROM order_fills) AS order_fills_count,
   (SELECT COUNT(1) FROM orders) AS orders_count,
   NOW() AS current_time;"
@@ -127,7 +153,7 @@ verifyprintpretty() {
 }
 
 verify() {
-  $DOCKER run --rm -it \
+  $DOCKER run --rm -i \
   --name=molt_verify \
   --hostname=molt_verify \
   --ip=$MOLT_IP \
@@ -155,7 +181,10 @@ print_cmd() {
   echo "$1" | cat -n
 }
 
+# Count total stages dynamically from the number of do_stage calls in this script
+TOTALSTAGES=$(grep -c '^do_stage ' "$0" || true)
 STAGE=1
+
 print_title() {
   echo
   echo "🚀 [$STAGE/$TOTALSTAGES] $1..."
@@ -170,21 +199,22 @@ do_stage() {
   fi
   if [[ -n "$1" ]]; then
     print_title "$1"
-  fi  
+  fi
   if [[ -n "$2" ]]; then
     print_text "$2"
   fi
   echo
-  if [[ -n "$3" ]]; then
+  if [[ -n "${3:-}" ]]; then
     echo "My next command..."
     echo "----------------"
     echo
     print_cmd "$3"
     pause
     echo "-------------- Running -------------"
+    # Note: eval is used here because CMD strings reference shell functions and variables
+    # defined in this script. All CMD values are internally defined, not user-supplied.
     eval "$3"
     echo "--------------- Done ---------------"
-    #pause
   fi
 }
 
@@ -228,9 +258,9 @@ TITLE="Configuring PostgreSQL for logical replication"
 TEXT="📤 Copying postgresql.conf from container and editing WAL settings..."
 CMD="sleep 5
 $DOCKER cp postgres:/var/lib/postgresql/data/postgresql.conf ./postgresql.conf
-sed -i '' 's/^#*wal_level.*/wal_level = logical/' ./postgresql.conf
-sed -i '' 's/^#*max_replication_slots.*/max_replication_slots = 4/' ./postgresql.conf
-sed -i '' 's/^#*max_wal_senders.*/max_wal_senders = 4/' ./postgresql.conf
+sed_i 's/^#*wal_level.*/wal_level = logical/' ./postgresql.conf
+sed_i 's/^#*max_replication_slots.*/max_replication_slots = 4/' ./postgresql.conf
+sed_i 's/^#*max_wal_senders.*/max_wal_senders = 4/' ./postgresql.conf
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
@@ -347,8 +377,8 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 
 TITLE="Remove unsupported commands"
 TEXT="CockroachDB does not support \restrict and \unrestrict.  So we need to remove those commands before we use the schema in CockroachDB."
-CMD="sed -i '' 's/^\\\\restrict/-- &/' ./molt-bucket/postgres_schema.sql.1
-sed -i '' 's/^\\\\unrestrict/-- &/' ./molt-bucket/postgres_schema.sql.1
+CMD="sed_i 's/^\\\\restrict/-- &/' ./molt-bucket/postgres_schema.sql.1
+sed_i 's/^\\\\unrestrict/-- &/' ./molt-bucket/postgres_schema.sql.1
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
@@ -366,7 +396,7 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # ========================
 TITLE="Verifying CockroachDB schema"
 TEXT="This command will verify that the tables have been successfully created in CockroachDB."
-CMD="$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"SHOW CREATE ALL TABLES;\"
+CMD="$DOCKER exec -i crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"SHOW CREATE ALL TABLES;\"
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
@@ -379,8 +409,9 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # Run molt fetch 
 # ========================
 TITLE="Running MOLT fetch"
+# NOTE: --allow-tls-mode-disable is used for this local demo only. Always use TLS in production.
 TEXT="MOLT fetch does the initial data copy from postgres to CockroachDB.  Real time replication will come in a later step."
-CMD="$DOCKER run --rm -it \
+CMD="$DOCKER run --rm -i \
   --name=molt_fetch \
   --net=moltdemo \
   --ip=$MOLT_IP \
@@ -406,7 +437,7 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # ========================
 TITLE="Running MOLT verify"
 TEXT="We are using MOLT verify to compare the source data and CockroachDB data.  If any activity has occured since the data load into CockroachDB was done, this will result in differences."
-CMD="$DOCKER run --rm -it \
+CMD="$DOCKER run --rm -i \
   --name=molt_verify \
   --hostname=molt_verify \
   --ip=$MOLT_IP \
@@ -554,11 +585,11 @@ ECPUB=`cat ./certs/ec.pub`
 
 TITLE="Certs stuff"
 TEXT="Now we clear the JWT table that replicator will use and insert our EC public key."
-CMD="$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"truncate table _replicator.jwt_public_keys;\"
-$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"INSERT INTO _replicator.jwt_public_keys (public_key) VALUES (
+CMD="$DOCKER exec -i crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"truncate table _replicator.jwt_public_keys;\"
+$DOCKER exec -i crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"INSERT INTO _replicator.jwt_public_keys (public_key) VALUES (
 '$ECPUB'
 );\"
-$DOCKER exec -it crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"select * from _replicator.jwt_public_keys;\"
+$DOCKER exec -i crdb cockroach sql --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --certs-dir=./certs/ -e \"select * from _replicator.jwt_public_keys;\"
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
@@ -604,7 +635,7 @@ CMD="openssl s_client -connect localhost:30004 \
   > ./certs/replicator-leaf.pem
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
-CA_B64=$(base64 -w0 -i ./certs/replicator-leaf.pem)
+CA_B64=$(b64_encode ./certs/replicator-leaf.pem)
 
 TITLE="Create changefeed to MOLT Replicator"
 # for pgsql/crdb sources, for failback, you need to include the schema as part of the URI

@@ -1,0 +1,13 @@
+global
+    scrape_interval: 5s
+
+scrape_configs
+- job_name: molt_fetch
+  static_configs:
+  - targets: ['molt_fetch:3030']
+- job_name: replicator_forward
+  static_configs:
+  - targets: ['replicator_forward:30005']
+- job_name: replicator_reverse
+  static_configs:
+  - targets: ['replicator_reverse:30005']

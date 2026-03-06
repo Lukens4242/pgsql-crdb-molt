@@ -21,6 +21,8 @@ PG_IP="172.27.0.101"
 CRDB_IP="172.27.0.102"
 MOLT_IP="172.27.0.103"
 REP_IP="172.27.0.104"
+PROMETHEUS_IP="172.27.0.105"
+GRAFANA_IP="172.27.0.106"
 # WARNING: Demo-only credentials. Use env vars or a secrets manager in production.
 PG_DSN_MOLT="postgres://admin:secret@pgsql_host:5432/sampledb?sslmode=disable"
 CRDB_DSN_MOLT="postgresql://root@crdb_host:26257/defaultdb?sslcert=%2Fcerts%2Fclient.root.crt&sslkey=%2Fcerts%2Fclient.root.key&sslmode=verify-full&sslrootcert=%2Fcerts%2Fca.crt"
@@ -94,6 +96,8 @@ if [[ $RESET == "1" ]]; then
   $DOCKER rm -f crdb 2>/dev/null || true
   $DOCKER rm -f replicator_forward 2>/dev/null || true
   $DOCKER rm -f replicator_reverse 2>/dev/null || true
+  $DOCKER rm -f prometheus 2>/dev/null || true
+  $DOCKER rm -f grafana 2>/dev/null || true
   $DOCKER network rm moltdemo 2>/dev/null || true
   rm -f index.txt* serial.txt* 
 
@@ -228,6 +232,8 @@ CMD="
 #$DOCKER pull cockroachdb/molt:1.3.5
 #$DOCKER pull cockroachdb/replicator:v1.3.0
 #$DOCKER pull cockroachdb/cockroach:v24.3.25
+#$DOCKER pull ubuntu/prometheus:2.33-22.04_beta
+#$DOCKER pull grafana/grafana-oss:12.4.0-ubuntu
 $DOCKER network create --driver=bridge --subnet=172.27.0.0/16 --ip-range=172.27.0.0/24 --gateway=172.27.0.1 moltdemo
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
@@ -406,6 +412,44 @@ CMD="checkcounts"
 do_stage "$TITLE" "$TEXT" "$CMD"
 
 # ========================
+# Start prometheus
+# ========================
+TITLE="Starting prometheus"
+TEXT="Starting up prometheus so that we can capture metrics from molt/replicator.  You can reach the web interface at http://localhost:9090"
+mkdir -p prometheus
+CMD="$DOCKER run -d \
+  --name=prometheus \
+  --net=moltdemo \
+  --ip=$PROMETHEUS_IP \
+  --hostname=prometheus \
+  -v ./prometheus.yml:/etc/prometheus/prometheus.yml \
+  -v ./prometheus:/prometheus \
+  -p 9090:9090 \
+  ubuntu/prometheus:2.33-22.04_beta
+"
+do_stage "$TITLE" "$TEXT" "$CMD"
+
+
+# ========================
+# Start grafana
+# ========================
+TITLE="Start grafana"
+TEXT="Start up grafana for molt/replicator metrics.  You can reach the interface at http://localhost:3000 user:admin pw:admin"
+mkdir -p grafana-storage
+CMD="$DOCKER run -d \
+  --name=grafana \
+  --net=moltdemo \
+  --ip=$GRAFANA_IP \
+  --hostname=grafana \
+  -v ./grafana-storage:/var/lib/grafana \
+  -v ./grafana.ini:/etc/grafana/grafana.ini \
+  -p 3000:3000 \
+  grafana/grafana-oss:12.4.0-ubuntu
+"
+do_stage "$TITLE" "$TEXT" "$CMD"
+
+
+# ========================
 # Run molt fetch 
 # ========================
 TITLE="Running MOLT fetch"
@@ -487,6 +531,7 @@ CMD="$DOCKER run --rm \
   --hostname=replicator \
   --ip=$REP_IP \
   --net=moltdemo \
+  -p 30055:30055 \
   -v "./certs:/certs" \
   cockroachdb/replicator:v1.3.0 \
   pglogical \
@@ -496,6 +541,7 @@ CMD="$DOCKER run --rm \
   --sourceConn \"$PG_DSN_MOLT\" \
   --targetConn \"$CRDB_DSN_REPLICATOR\" \
   --slotName replication_slot \
+  --metricsAddr :30055 \
   --publicationName molt_fetch
 
 sleep 10
@@ -554,6 +600,7 @@ CMD="$DOCKER run --rm \
  --ip=$REP_IP \
  --net=moltdemo \
  -p 30004:30004 \
+ -p 30056:30056 \
  -v ./certs:/certs \
  cockroachdb/replicator:v1.3.0 \
   start \
@@ -561,7 +608,7 @@ CMD="$DOCKER run --rm \
   --stagingCreateSchema \
   --stagingSchema _replicator \
   --bindAddr :30004 \
-  --metricsAddr :30005 \
+  --metricsAddr :30056 \
   --targetConn \"$PG_DSN_MOLT\" \
   --stagingConn \"$CRDB_DSN_STAGING\" \
   --tlsCertificate /certs/node-rep.crt \

@@ -164,7 +164,7 @@ verify() {
   --net=moltdemo \
   -v "$SCHEMA_DIR:/molt-bucket" \
   -v "./certs:/certs" \
-  cockroachdb/molt:1.3.5 \
+  cockroachdb/molt:1.3.6 \
   verify \
   --table-filter '[^_].*' \
   --source "$PG_DSN_MOLT" \
@@ -229,7 +229,7 @@ do_stage() {
 TITLE="Fetching latest docker images and building network"
 TEXT=""
 CMD="
-#$DOCKER pull cockroachdb/molt:1.3.5
+#$DOCKER pull cockroachdb/molt:1.3.6
 #$DOCKER pull cockroachdb/replicator:v1.3.1
 #$DOCKER pull cockroachdb/cockroach:v24.3.25
 #$DOCKER pull ubuntu/prometheus:2.33-22.04_beta
@@ -369,7 +369,7 @@ CMD="$DOCKER run --rm \
   --net=moltdemo \
   --hostname=molt_convert \
   --ip=$MOLT_IP \
-  cockroachdb/molt:1.3.5 convert postgres \
+  cockroachdb/molt:1.3.6 convert postgres \
   --schema /molt-data/postgres_schema.sql \
   --url \"$CRDB_DSN_MOLT\"
 "
@@ -462,7 +462,7 @@ CMD="$DOCKER run --rm -i \
   --hostname=molt_fetch \
   -v \"$SCHEMA_DIR:/molt-bucket\" \
   -v \"./certs:/certs\" \
-  cockroachdb/molt:1.3.5 \
+  cockroachdb/molt:1.3.6 \
   fetch \
   --source \"$PG_DSN_MOLT\" \
   --target \"$CRDB_DSN_MOLT\" \
@@ -488,7 +488,7 @@ CMD="$DOCKER run --rm -i \
   --net=moltdemo \
   -v \"$SCHEMA_DIR:/molt-bucket\" \
   -v \"./certs:/certs\" \
-  cockroachdb/molt:1.3.5 \
+  cockroachdb/molt:1.3.6 \
   verify \
   --table-filter '[^_].*' \
   --source \"$PG_DSN_MOLT\" \

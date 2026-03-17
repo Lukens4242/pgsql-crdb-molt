@@ -230,7 +230,7 @@ TITLE="Fetching latest docker images and building network"
 TEXT=""
 CMD="
 #$DOCKER pull cockroachdb/molt:1.3.5
-#$DOCKER pull cockroachdb/replicator:v1.3.0
+#$DOCKER pull cockroachdb/replicator:v1.3.1
 #$DOCKER pull cockroachdb/cockroach:v24.3.25
 #$DOCKER pull ubuntu/prometheus:2.33-22.04_beta
 #$DOCKER pull grafana/grafana-oss:12.4.0-ubuntu
@@ -434,7 +434,7 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # Start grafana
 # ========================
 TITLE="Start grafana"
-TEXT="Start up grafana for molt/replicator metrics.  You can reach the interface at http://localhost:3000 user:admin pw:admin"
+TEXT="Start up grafana for molt/replicator metrics.  You can reach the interface at http://localhost:3000  At this time import the *.json dashboards grafana_dashboard.json and replicator_grafana_dashboard.json.  user:admin pw:admin"
 mkdir -p grafana-storage
 CMD="$DOCKER run -d \
   --name=grafana \
@@ -602,7 +602,7 @@ CMD="$DOCKER run --rm \
  -p 30004:30004 \
  -p 30056:30056 \
  -v ./certs:/certs \
- cockroachdb/replicator:v1.3.0 \
+ cockroachdb/replicator:v1.3.1 \
   start \
   -v \
   --stagingCreateSchema \

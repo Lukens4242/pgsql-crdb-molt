@@ -57,7 +57,7 @@ The script will:
 - Start MOLT replication
 - Set up failback to PostgreSQL
 
-The script will pause at each step and wait for you to press [Enter] to continue. Use this time to inspect output, logs, or states.
+The script will pause at each step and wait for you to press [Enter] to continue. Use this time to inspect output, logs, or states.  When you get to the grafana portion of things for metrics, be sure to import the two grafana *.json files in this project.  They include the pieces you need to watch both forward and failback replication.
 
 #### Pipeline flags
 

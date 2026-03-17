@@ -533,7 +533,7 @@ CMD="$DOCKER run --rm \
   --net=moltdemo \
   -p 30055:30055 \
   -v "./certs:/certs" \
-  cockroachdb/replicator:v1.3.0 \
+  cockroachdb/replicator:v1.3.1 \
   pglogical \
   -v \
   --stagingCreateSchema \
@@ -644,7 +644,7 @@ TITLE="Generate JWT"
 TEXT="Now we will use replicator to generate the JWT auth token we will use in the changefeed later on to stream data from CockroachDB to replicator.  This is the token created from our secret EC key."
 CMD="$DOCKER run --rm \
  -v ./certs:/certs \
- cockroachdb/replicator:v1.3.0 \
+ cockroachdb/replicator:v1.3.1 \
   make-jwt \
   -k /certs/ec.key \
   -a sampledb.public \

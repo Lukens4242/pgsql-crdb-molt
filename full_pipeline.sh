@@ -8,6 +8,7 @@ set -euo pipefail
 
 # Container runtime: override with --docker or --podman flags below.
 DOCKER="podman"
+USE_COMPOSE=0
 
 SCHEMA_DIR="./molt-bucket"
 SCHEMA_FILE="$SCHEMA_DIR/postgres_schema.sql"
@@ -45,6 +46,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --podman)
             DOCKER="podman"
+            shift
+            ;;
+        --compose)
+            USE_COMPOSE=1
             shift
             ;;
         --width|-w)
@@ -151,6 +156,15 @@ checkcounts() {
   NOW() AS current_time;"
 }
 
+check_replication_slots() {
+  echo "Checking PostgreSQL replication slot health..."
+  $DOCKER exec -e PGPASSWORD=secret -i postgres psql -h $PG_IP -U admin -d sampledb -c "
+    SELECT slot_name, active, restart_lsn, confirmed_flush_lsn,
+           pg_current_wal_lsn() AS current_wal_lsn,
+           pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn) AS wal_lag_bytes
+    FROM pg_replication_slots;"
+}
+
 verifyprintpretty() {
  sleep 1 
  cat $VERIFY_LOG | tail -n +2 | jq
@@ -228,6 +242,10 @@ do_stage() {
 
 TITLE="Fetching latest docker images and building network"
 TEXT=""
+if [[ $USE_COMPOSE == "1" ]]; then
+CMD="$DOCKER compose up -d --no-start 2>/dev/null || true
+"
+else
 CMD="
 #$DOCKER pull cockroachdb/molt:1.3.6
 #$DOCKER pull cockroachdb/replicator:v1.3.1
@@ -236,6 +254,7 @@ CMD="
 #$DOCKER pull grafana/grafana-oss:12.4.0-ubuntu
 $DOCKER network create --driver=bridge --subnet=172.27.0.0/16 --ip-range=172.27.0.0/24 --gateway=172.27.0.1 moltdemo
 "
+fi
 do_stage "$TITLE" "$TEXT" "$CMD"
 
 # ========================
@@ -244,6 +263,10 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 
 TITLE="Starting postgres container"
 TEXT=""
+if [[ $USE_COMPOSE == "1" ]]; then
+CMD="$DOCKER compose up -d postgres
+"
+else
 CMD="$DOCKER run --rm -d --name postgres -p 5432:5432 \
   --hostname=pgsql_host \
   --ip=$PG_IP \
@@ -254,6 +277,7 @@ CMD="$DOCKER run --rm -d --name postgres -p 5432:5432 \
   -v pgdata:/var/lib/postgresql/data \
   docker.io/library/postgres:15
 "
+fi
 do_stage "$TITLE" "$TEXT" "$CMD"
 
 # ========================
@@ -262,7 +286,10 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 
 TITLE="Configuring PostgreSQL for logical replication"
 TEXT="📤 Copying postgresql.conf from container and editing WAL settings..."
-CMD="sleep 5
+CMD="until $DOCKER exec postgres pg_isready -h $PG_IP -U admin -d sampledb; do
+  echo '⏳ Waiting for PostgreSQL to become ready...'
+  sleep 2
+done
 $DOCKER cp postgres:/var/lib/postgresql/data/postgresql.conf ./postgresql.conf
 sed_i 's/^#*wal_level.*/wal_level = logical/' ./postgresql.conf
 sed_i 's/^#*max_replication_slots.*/max_replication_slots = 4/' ./postgresql.conf
@@ -274,7 +301,10 @@ TITLE="Restart Postgres"
 TEXT="📥 Copying updated config back and restarting container..."
 CMD="$DOCKER cp ./postgresql.conf postgres:/var/lib/postgresql/data/postgresql.conf
 $DOCKER restart postgres
-sleep 5
+until $DOCKER exec postgres pg_isready -h $PG_IP -U admin -d sampledb; do
+  echo '⏳ Waiting for PostgreSQL to become ready after restart...'
+  sleep 2
+done
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
@@ -337,9 +367,15 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # ========================
 TITLE="Starting CockroachDB container"
 TEXT=""
+if [[ $USE_COMPOSE == "1" ]]; then
+CMD="$DOCKER compose up -d crdb
+sleep 5
+"
+else
 CMD="$DOCKER run -d -v \"./certs:/cockroach/certs\" --net=moltdemo --ip=$CRDB_IP --hostname=crdb_host --env COCKROACH_DATABASE=defaultdb --env COCKROACH_USER=root --env COCKROACH_PASSWORD=password --name=crdb -p 26257:26257 -p 8080:8080 cockroachdb/cockroach:v24.3.25 start-single-node --http-addr=crdb:8080
 sleep 5
 "
+fi
 do_stage "$TITLE" "$TEXT" "$CMD"
 
 TITLE="CRDB Ready"
@@ -417,16 +453,22 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 TITLE="Starting prometheus"
 TEXT="Starting up prometheus so that we can capture metrics from molt/replicator.  You can reach the web interface at http://localhost:9090"
 mkdir -p prometheus
+if [[ $USE_COMPOSE == "1" ]]; then
+CMD="$DOCKER compose up -d prometheus
+"
+else
 CMD="$DOCKER run -d \
   --name=prometheus \
   --net=moltdemo \
   --ip=$PROMETHEUS_IP \
   --hostname=prometheus \
   -v ./prometheus.yml:/etc/prometheus/prometheus.yml \
+  -v ./prometheus_rules.yml:/etc/prometheus/prometheus_rules.yml \
   -v ./prometheus:/prometheus \
   -p 9090:9090 \
   ubuntu/prometheus:2.33-22.04_beta
 "
+fi
 do_stage "$TITLE" "$TEXT" "$CMD"
 
 
@@ -434,8 +476,12 @@ do_stage "$TITLE" "$TEXT" "$CMD"
 # Start grafana
 # ========================
 TITLE="Start grafana"
-TEXT="Start up grafana for molt/replicator metrics.  You can reach the interface at http://localhost:3000  At this time import the *.json dashboards grafana_dashboard.json and replicator_grafana_dashboard.json.  user:admin pw:admin"
+TEXT="Start up grafana for molt/replicator metrics.  Dashboards are auto-provisioned.  You can reach the interface at http://localhost:3000  user:admin pw:admin"
 mkdir -p grafana-storage
+if [[ $USE_COMPOSE == "1" ]]; then
+CMD="$DOCKER compose up -d grafana
+"
+else
 CMD="$DOCKER run -d \
   --name=grafana \
   --net=moltdemo \
@@ -443,9 +489,13 @@ CMD="$DOCKER run -d \
   --hostname=grafana \
   -v ./grafana-storage:/var/lib/grafana \
   -v ./grafana.ini:/etc/grafana/grafana.ini \
+  -v ./grafana/provisioning:/etc/grafana/provisioning \
+  -v ./grafana_dashboard.json:/var/lib/grafana/dashboards/grafana_dashboard.json \
+  -v ./replicator_grafana_dashboard.json:/var/lib/grafana/dashboards/replicator_grafana_dashboard.json \
   -p 3000:3000 \
   grafana/grafana-oss:12.4.0-ubuntu
 "
+fi
 do_stage "$TITLE" "$TEXT" "$CMD"
 
 
@@ -544,7 +594,48 @@ CMD="$DOCKER run --rm \
   --metricsAddr :30055 \
   --publicationName molt_fetch
 
-sleep 10
+echo '⏳ Waiting for replicator_forward to become healthy...'
+for i in \$(seq 1 30); do
+  if curl -sf http://localhost:30055/_/varz > /dev/null 2>&1; then
+    echo '✅ replicator_forward is healthy.'
+    break
+  fi
+  echo \"  Attempt \$i/30...\"
+  sleep 2
+done
+"
+do_stage "$TITLE" "$TEXT" "$CMD"
+
+TITLE="Check Replication Slot Health"
+TEXT="Verifying that the PostgreSQL replication slot is active and checking WAL lag."
+CMD="check_replication_slots"
+do_stage "$TITLE" "$TEXT" "$CMD"
+
+TITLE="Concurrent workload during replication"
+TEXT="Running the workload against PostgreSQL while replicator is active, then verifying counts converge. This tests that live traffic replicates correctly."
+CMD="
+echo 'Starting background workload against PostgreSQL...'
+$DOCKER run --rm --network=moltdemo -v \$(pwd):/app --name=workload_test order-app --dsn \"$PG_DSN_MOLT\" --generate --insert --fill &
+WORKLOAD_PID=\$!
+echo \"Workload running (PID \$WORKLOAD_PID), waiting 30 seconds...\"
+sleep 30
+echo 'Stopping workload...'
+$DOCKER stop workload_test 2>/dev/null || true
+wait \$WORKLOAD_PID 2>/dev/null || true
+echo 'Waiting for replication to converge...'
+for i in \$(seq 1 24); do
+  PG_COUNT=\$($DOCKER exec -e PGPASSWORD=secret postgres psql -h $PG_IP -U admin -d sampledb -t -c \"SELECT COUNT(1) FROM orders;\" | tr -d ' ')
+  CRDB_COUNT=\$($DOCKER exec crdb cockroach sql --certs-dir=./certs/ --host=$CRDB_IP --port=26257 --user=root --database=defaultdb --format csv -e \"SELECT count(1) FROM orders;\" | tail -1)
+  echo \"  Attempt \$i: PG=\$PG_COUNT CRDB=\$CRDB_COUNT\"
+  if [[ \"\$PG_COUNT\" == \"\$CRDB_COUNT\" ]]; then
+    echo '✅ Counts converged after live replication.'
+    break
+  fi
+  sleep 5
+done
+if [[ \"\$PG_COUNT\" != \"\$CRDB_COUNT\" ]]; then
+  echo '⚠️ Counts have not converged after 2 minutes. PG='\$PG_COUNT' CRDB='\$CRDB_COUNT
+fi
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
@@ -656,7 +747,14 @@ JWT=`cat ./certs/out.jwt`
 TITLE="Restart Replicator"
 TEXT="Restarting replicator_reverse to read the new keys.  If we were to wait instead of restarting replicator, it would reread the keys each minute."
 CMD="$DOCKER restart replicator_reverse
-sleep 5
+echo '⏳ Waiting for replicator_reverse to become healthy...'
+for i in \$(seq 1 15); do
+  if curl -sf http://localhost:30056/_/varz > /dev/null 2>&1; then
+    echo '✅ replicator_reverse is healthy.'
+    break
+  fi
+  sleep 2
+done
 "
 do_stage "$TITLE" "$TEXT" "$CMD"
 
@@ -733,8 +831,17 @@ TITLE="Insert data into CRDB"
 TEXT="Show reverse replication is working by inserting data into CockroachDB and letting it replicate into postgres."
 CMD='
 generatedata "$CRDB_DSN_WORKLOAD"
-echo Sleep 10 seconds to let the change propagate to postgres.
-sleep 10
+echo "Waiting for counts to converge..."
+for i in $(seq 1 12); do
+  PG_COUNT=$('"$DOCKER"' exec -e PGPASSWORD=secret postgres psql -h '"$PG_IP"' -U admin -d sampledb -t -c "SELECT COUNT(1) FROM orders;" | tr -d " ")
+  CRDB_COUNT=$('"$DOCKER"' exec crdb cockroach sql --certs-dir=./certs/ --host='"$CRDB_IP"' --port=26257 --user=root --database=defaultdb --format csv -e "SELECT count(1) FROM orders;" | tail -1)
+  echo "  Attempt $i: PG=$PG_COUNT CRDB=$CRDB_COUNT"
+  if [[ "$PG_COUNT" == "$CRDB_COUNT" ]]; then
+    echo "✅ Counts converged."
+    break
+  fi
+  sleep 5
+done
 '
 do_stage "$TITLE" "$TEXT" "$CMD"
 

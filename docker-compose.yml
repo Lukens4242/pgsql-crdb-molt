@@ -1,0 +1,78 @@
+version: "3.8"
+
+networks:
+  moltdemo:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.27.0.0/16
+          ip_range: 172.27.0.0/24
+          gateway: 172.27.0.1
+
+volumes:
+  pgdata:
+
+services:
+  postgres:
+    image: docker.io/library/postgres:15
+    container_name: postgres
+    hostname: pgsql_host
+    networks:
+      moltdemo:
+        ipv4_address: 172.27.0.101
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: sampledb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  crdb:
+    image: cockroachdb/cockroach:v24.3.25
+    container_name: crdb
+    hostname: crdb_host
+    networks:
+      moltdemo:
+        ipv4_address: 172.27.0.102
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    environment:
+      COCKROACH_DATABASE: defaultdb
+      COCKROACH_USER: root
+      COCKROACH_PASSWORD: password
+    volumes:
+      - ./certs:/cockroach/certs
+    command: start-single-node --http-addr=crdb:8080
+
+  prometheus:
+    image: ubuntu/prometheus:2.33-22.04_beta
+    container_name: prometheus
+    hostname: prometheus
+    networks:
+      moltdemo:
+        ipv4_address: 172.27.0.105
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus_rules.yml:/etc/prometheus/prometheus_rules.yml
+      - ./prometheus:/prometheus
+
+  grafana:
+    image: grafana/grafana-oss:12.4.0-ubuntu
+    container_name: grafana
+    hostname: grafana
+    networks:
+      moltdemo:
+        ipv4_address: 172.27.0.106
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana-storage:/var/lib/grafana
+      - ./grafana.ini:/etc/grafana/grafana.ini
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana_dashboard.json:/var/lib/grafana/dashboards/grafana_dashboard.json
+      - ./replicator_grafana_dashboard.json:/var/lib/grafana/dashboards/replicator_grafana_dashboard.json

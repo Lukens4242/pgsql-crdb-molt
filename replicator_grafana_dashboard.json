@@ -88,7 +88,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "This value compares the source cluster wall time of the incoming resolved timestamp (checkpoint) versus the current wall time. This represents the lag of the data which is actionable by Replciator.\n\nNote that if multiple instances of Replicator are present, they may have slightly different views of this lag, based on sampling rate. In all cases, they should agree within one second.",
       "fieldConfig": {
@@ -143,7 +143,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "disableTextWrap": false,
           "editorMode": "code",
@@ -159,7 +159,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "disableTextWrap": false,
           "editorMode": "code",
@@ -180,7 +180,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "",
       "fieldConfig": {
@@ -319,7 +319,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "sum by (schema) (rate(best_effort_accept_applied_total[$__rate_interval]) + rate(best_effort_accept_deferred_total[$__rate_interval]))",
@@ -332,7 +332,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "sum by (schema) (rate(stage_mutations_total[$__rate_interval]))",
@@ -345,7 +345,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum(rate(stage_duration_seconds_bucket[$__rate_interval])) by (le))",
@@ -358,7 +358,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "sum by (schema) (rate(apply_upserts_total[$__rate_interval]) + rate(apply_deletes_total[$__rate_interval]))",
@@ -370,7 +370,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum(rate(apply_duration_seconds_bucket[$__rate_interval])) by (le))",
@@ -383,7 +383,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum(rate(core_sweep_duration_seconds_bucket[$__rate_interval])) by (le))",
@@ -396,7 +396,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "sum by (pool) (pool_acquired_connection_count + pool_idle_connection_count)",
@@ -409,7 +409,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "sum (rate(http_payload_in_bytes_total_sum[$__rate_interval]))",
@@ -422,7 +422,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -441,7 +441,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "A list of monitored instances of Replicator. The instance name is taken from the Prometheus scraper and can be used to refine the dashboard views.",
       "fieldConfig": {
@@ -538,7 +538,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -552,7 +552,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
@@ -632,7 +632,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "Source lag and target lag.\n\nSource lag is the time between when a source transaction is committed on the source and when its BEGIN transaction redo log arrives at replicator, which captures the time taken before replicator is finally able to start processing a source transaction.\n\nTarget lag is the time between when a source transaction is committed on the source and when its transactional data changes have been persisted on the target CockroachDB.\n\nBoth metrics are in P95 time series format, and can provide a general idea of if replication is lagging behind.",
       "fieldConfig": {
@@ -726,7 +726,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
@@ -748,7 +748,7 @@
       "datasource": {
         "default": true,
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "Gives the histogram for the delta between writes to source and writes to the staging database (sampling the first and last mutation per batch; ONLY MEANINGFUL FOR CRDB RIGHT NOW, OTHER DIALECTS TBD)",
       "fieldConfig": {
@@ -829,7 +829,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum by(le) (rate(stage_commit_lag_seconds_bucket[5m])))",
@@ -841,7 +841,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(stage_commit_lag_seconds_bucket[5m])))",
@@ -854,7 +854,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.75, sum by(le) (rate(stage_commit_lag_seconds_bucket[5m])))",
@@ -867,7 +867,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(stage_commit_lag_seconds_bucket[5m])))",
@@ -880,7 +880,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "disableTextWrap": false,
           "editorMode": "code",
@@ -902,7 +902,7 @@
       "datasource": {
         "default": true,
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "Gives the histogram for the delta between writes to source and writes to the target database (sampling the first and last mutation per batch; ONLY MEANINGFUL FOR CRDB RIGHT NOW, OTHER DIALECTS TBD)",
       "fieldConfig": {
@@ -983,7 +983,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum by(le) (rate(source_commit_to_apply_lag_seconds_bucket[5m])))",
@@ -995,7 +995,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(source_commit_to_apply_lag_seconds_bucket[5m])))",
@@ -1008,7 +1008,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.75, sum by(le) (rate(source_commit_to_apply_lag_seconds_bucket[5m])))",
@@ -1021,7 +1021,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(source_commit_to_apply_lag_seconds_bucket[5m])))",
@@ -1034,7 +1034,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.25, sum by(le) (rate(source_commit_to_apply_lag_seconds_bucket[5m])))",
@@ -1051,7 +1051,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "The rate of error and warning log messages.",
       "fieldConfig": {
@@ -1172,7 +1172,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1190,7 +1190,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "The number of mutations that have been sent to the target apply queue for processing.",
       "fieldConfig": {
@@ -1275,7 +1275,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
@@ -1306,7 +1306,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "This heatmap shows the number of HTTP requests made to Replicator and how long they took.\n\nSlowness in the HTTP endpoints will reflect performance of the staging database in consistent modes and performance of the target database in immedate or best-effort modes.",
           "fieldConfig": {
@@ -1371,7 +1371,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -1393,7 +1393,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -1512,7 +1512,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum(rate(http_latency_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -1525,7 +1525,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.75, sum(rate(http_latency_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -1538,7 +1538,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(http_latency_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -1551,7 +1551,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.99, sum(rate(http_latency_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -1564,7 +1564,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "exemplar": false,
@@ -1582,7 +1582,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "This heatmap shows the distribution of incoming payload sizes. This value will be controlled by the various changefeed flush options.",
           "fieldConfig": {
@@ -1647,7 +1647,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -1669,7 +1669,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -1717,7 +1717,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -1751,7 +1751,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "This heatmap shows the number of staging database interactions and how long they took. Slowness in the staging phase should tend to focus performance investigations on the staging database.",
           "fieldConfig": {
@@ -1816,7 +1816,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -1838,7 +1838,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -1960,7 +1960,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum(rate(stage_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -1973,7 +1973,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.75, sum(rate(stage_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -1986,7 +1986,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(stage_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -1999,7 +1999,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.99, sum(rate(stage_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -2012,7 +2012,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "exemplar": false,
@@ -2030,7 +2030,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "These gauges shown the rates at which mutations are written and help the operator understand the overall shape of the workload.",
           "fieldConfig": {
@@ -2078,7 +2078,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -2098,7 +2098,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "These gauges shown the rates at which mutations are written and help the operator understand the overall shape of the workload.",
           "fieldConfig": {
@@ -2151,7 +2151,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -2171,7 +2171,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "CockroachDB changefeeds guarantee at-least-once delivery of any given mutation. It is normal to see occasional spurts of re-delivery during range splits or cluster maintenance.",
           "fieldConfig": {
@@ -2219,7 +2219,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -2239,7 +2239,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "Errors writing to the staging tables will cause push-back on the source changefeed and ultimately contribute to the source lag metric.",
           "fieldConfig": {
@@ -2287,7 +2287,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -2321,7 +2321,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "This table shows which instance of Replicator is sweeping any given table.",
           "fieldConfig": {
@@ -2377,7 +2377,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "exemplar": false,
@@ -2418,7 +2418,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The core sequencer runs a loop that looks for mutations to apply and then applies them. The time that this loop takes is a function of the number of unapplied mutations and the performance of the staging and target databases. The specific values in this graph should taken as relative to established performance; the absolute values will vary based on the size and shape of the workload being replicated.",
           "fieldConfig": {
@@ -2502,7 +2502,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum(rate(core_sweep_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -2515,7 +2515,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.75, sum(rate(core_sweep_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -2528,7 +2528,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(core_sweep_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -2541,7 +2541,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.99, sum(rate(core_sweep_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -2558,7 +2558,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "Merge lag will correlate with the table that is furthest behind.",
           "fieldConfig": {
@@ -2637,7 +2637,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "max by (schema) (stage_merge_lag_seconds)",
@@ -2653,7 +2653,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "This graph may show cases in which excessive time is spent within the JS runtime. This would tend to point towards inefficient user code.",
           "fieldConfig": {
@@ -2764,7 +2764,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum(rate(script_exec_time_seconds_bucket[$__rate_interval])) by (le))",
@@ -2777,7 +2777,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.75, sum(rate(script_exec_time_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -2790,7 +2790,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(script_exec_time_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -2803,7 +2803,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.99, sum(rate(script_exec_time_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -2816,7 +2816,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "sum(rate(script_exec_time_seconds_count[$__rate_interval]))",
@@ -2833,7 +2833,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "This may help to identify cases in which the staging tables are slow to read from. ",
           "fieldConfig": {
@@ -2882,7 +2882,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -2904,7 +2904,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The rate at which rows are being read from staging. In a steady-state condition, this should be equal to the rate at which rows are being staged.",
           "fieldConfig": {
@@ -2954,7 +2954,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "exemplar": false,
@@ -2971,7 +2971,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The age of the data being consumed from staging tables. In consistent modes, the tables for any single changefeed will advance in lock-step. In BestEffort mode, tables will advance independently from one another.",
           "fieldConfig": {
@@ -3021,7 +3021,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "exemplar": false,
@@ -3052,7 +3052,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "This heatmap shows the number of target database interactions and how long they took. Slowness in the apply phase should tend to focus performance investigations on the target database.",
           "fieldConfig": {
@@ -3117,7 +3117,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -3139,7 +3139,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -3261,7 +3261,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum(rate(apply_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -3274,7 +3274,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.75, sum(rate(apply_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -3287,7 +3287,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(apply_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -3300,7 +3300,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.99, sum(rate(apply_duration_seconds_bucket[$__rate_interval])) by (le, schema))",
@@ -3313,7 +3313,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "exemplar": false,
@@ -3331,7 +3331,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3378,7 +3378,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -3398,7 +3398,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "This may help to identify tables which are slow to upsert into, possibly indicating insufficient target performance.",
           "fieldConfig": {
@@ -3451,7 +3451,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -3473,7 +3473,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The age of the mutations being applied to the table. This provides an estimate of the staleness of the data available within the given target table.",
           "fieldConfig": {
@@ -3526,7 +3526,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -3548,7 +3548,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3595,7 +3595,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -3629,7 +3629,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The number of mutations that were written directly to the target table in best-effort mode.",
           "fieldConfig": {
@@ -3677,7 +3677,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -3697,7 +3697,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The number of mutations that were written to staging, instead of directly to the target table.",
           "fieldConfig": {
@@ -3745,7 +3745,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -3779,7 +3779,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3859,7 +3859,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "sum by (pool) (pool_acquired_connection_count)",
@@ -3871,7 +3871,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "sum by (pool) (pool_idle_connection_count)",
@@ -3888,7 +3888,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "This shows the amount of time that a process spent waiting to acquire a connection from the respective connection pool. Sustained blocking would indicate an insufficient pool size.",
           "fieldConfig": {
@@ -3965,7 +3965,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "sum by (pool) (rate(pool_acquire_wait_seconds[$__rate_interval]))",
@@ -3981,7 +3981,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -4099,7 +4099,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(pool_dial_latency_seconds_bucket{pool=\"staging\"}[$__rate_interval])) by (le, pool))",
@@ -4112,7 +4112,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.99, sum(rate(pool_dial_latency_seconds_bucket{pool=\"staging\"}[$__rate_interval])) by (le, pool))",
@@ -4125,7 +4125,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "exemplar": false,
@@ -4143,7 +4143,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -4261,7 +4261,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(pool_dial_latency_seconds_bucket{pool=\"target\"}[$__rate_interval])) by (le, pool))",
@@ -4274,7 +4274,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.99, sum(rate(pool_dial_latency_seconds_bucket{pool=\"target\"}[$__rate_interval])) by (le, pool))",
@@ -4287,7 +4287,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "exemplar": false,
@@ -4305,7 +4305,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4356,7 +4356,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "sum (stmtcache_hits_total / (stmtcache_hits_total + stmtcache_misses_total))",
@@ -4386,7 +4386,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "Tasks that write to the target database may execute concurrently only if they would not modify the same row. Tasks that have overlapping row sets must be executed serially in order to guarantee data consistency.",
           "fieldConfig": {
@@ -4504,7 +4504,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum(rate(lockset_exec_wait_seconds_bucket{set=\"scheduler\"}[$__rate_interval])) by (le))",
@@ -4517,7 +4517,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.75, sum(rate(lockset_exec_wait_seconds_bucket{set=\"scheduler\"}[$__rate_interval])) by (le))",
@@ -4530,7 +4530,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(lockset_exec_wait_seconds_bucket{set=\"scheduler\"}[$__rate_interval])) by (le))",
@@ -4543,7 +4543,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.99, sum(rate(lockset_exec_wait_seconds_bucket{set=\"scheduler\"}[$__rate_interval])) by (le))",
@@ -4556,7 +4556,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "exemplar": false,
@@ -4574,7 +4574,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "Tasks that have no dependencies on other tasks will be executed immediately, otherwise they are deferred until eligible to run. A task that is executed may be retried if it discovers an ordering requirement that could not be detected during scheduling (e.g. Foreign Key constraints).",
           "fieldConfig": {
@@ -4650,7 +4650,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "sum(rate(lockset_immediate_start_count{set=\"scheduler\"}[$__rate_interval]))",
@@ -4662,7 +4662,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "sum(rate(lockset_deferred_start_count{set=\"scheduler\"}[$__rate_interval]))",
@@ -4675,7 +4675,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "uid": "prometheus"
               },
               "editorMode": "code",
               "expr": "sum(rate(lockset_retried_tasks_count{set=\"scheduler\"}[$__rate_interval]))",
@@ -4709,7 +4709,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "latency between a row entering the user script queue and execution start in the JavaScript runtime; higher values indicate user scripts are queuing up before execution",
       "fieldConfig": {
@@ -4801,7 +4801,7 @@
           "useBackend": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           }
         }
       ],
@@ -4811,7 +4811,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "The longest execution times amongst all user script handler function calls; use this to detect slow or inefficient user script handler functions that could introduce replication lag. onWrite functions should take longer than other handler functions like onRowUpsert or onRowDelete.",
       "fieldConfig": {
@@ -4896,7 +4896,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "disableTextWrap": false,
           "editorMode": "code",
@@ -4918,7 +4918,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "number of rows successfully processed and passed through user scripts; compare with script_rows_filtered_total to understand filtering ratios and validate script logic",
       "fieldConfig": {
@@ -5009,7 +5009,7 @@
           "useBackend": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           }
         }
       ],
@@ -5019,7 +5019,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "number of rows filtered out by user scripts (handlers that returned null or produced no output); use to identify scripts that unintentionally drop data or confirm filtering logic",
       "fieldConfig": {
@@ -5110,7 +5110,7 @@
           "useBackend": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           }
         }
       ],
@@ -5120,7 +5120,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "number of times user script handler functions (onRowUpsert, onRowDelete, onWrite) are invoked; use to confirm scripts are actively being called and detect misconfigurations",
       "fieldConfig": {
@@ -5211,7 +5211,7 @@
           "useBackend": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           }
         }
       ],
@@ -5221,7 +5221,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus"
       },
       "description": "number of errors during user script execution (JavaScript exceptions or runtime errors); use to surface failing scripts and monitor script stability over time",
       "fieldConfig": {
@@ -5312,7 +5312,7 @@
           "useBackend": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           }
         }
       ],
@@ -5329,7 +5329,7 @@
       {
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "prometheus"
         },
         "filters": [],
         "hide": 0,

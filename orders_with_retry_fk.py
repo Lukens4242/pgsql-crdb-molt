@@ -22,13 +22,17 @@ parser.add_argument("--dsn", required=True, help="PostgreSQL DSN connection stri
 parser.add_argument("--generate", action="store_true", help="Generate order CSV file")
 parser.add_argument("--insert", action="store_true", help="Insert orders from CSV")
 parser.add_argument("--fill", action="store_true", help="Fill orders")
+parser.add_argument("--delete", action="store_true", help="Delete completed orders")
+parser.add_argument("--orders", type=int, default=10_000, help="Total orders to generate (default: 10000)")
+parser.add_argument("--batch-size", type=int, default=8, help="Batch size for inserts (default: 8)")
+parser.add_argument("--threads", type=int, default=8, help="Number of threads (default: 8)")
 opt = parser.parse_args()
 DB_URI = opt.dsn
 
 ORDERS_FILE = "orders_1m.csv"
-TOTAL_ORDERS = 10_000
-BATCH_SIZE = 8
-THREADS = 8
+TOTAL_ORDERS = opt.orders
+BATCH_SIZE = opt.batch_size
+THREADS = opt.threads
 
 register_uuid()
 
@@ -73,7 +77,8 @@ class Orders:
     def __init__(self, conn_string):
         self.conn_string = conn_string
         self.symbol = "".join(random.choices(ascii_lowercase, k=3))
-        self.pool = ThreadedConnectionPool(THREADS, THREADS * 2, dsn=self.conn_string)
+        self.pool = ThreadedConnectionPool(1, THREADS * 2, dsn=self.conn_string)
+        self._conn_semaphore = threading.Semaphore(THREADS)
         self.processed_count = 0
         self.total_orders = 0
         self.progress_lock = threading.Lock()
@@ -86,6 +91,8 @@ class Orders:
         return False
 
     def get_conn(self):
+        if not self._conn_semaphore.acquire(timeout=30):
+            raise OperationalError("❌ Timed out waiting for a connection from the pool.")
         retries = 0
         max_retries = 5
         while retries <= max_retries:
@@ -104,6 +111,7 @@ class Orders:
                 wait = 0.1 * (2 ** retries)
                 print(f"⚠️ Retrying get_conn() in {wait:.2f}s due to connection error (attempt {retries})")
                 sleep(wait)
+        self._conn_semaphore.release()
         raise OperationalError("❌ Failed to get a working DB connection after retries.")
 
     def put_conn(self, conn):
@@ -111,6 +119,8 @@ class Orders:
             self.pool.putconn(conn)
         except Exception as e:
             print(f"⚠️ Failed to return connection: {e}")
+        finally:
+            self._conn_semaphore.release()
 
     def close_pool(self):
         self.pool.closeall()
@@ -293,6 +303,55 @@ class Orders:
 
         print("✅ All orders filled.")
 
+    def delete_completed_orders(self):
+        print(f"🗑️ Deleting completed orders in parallel with {THREADS} threads...")
+        conn = self.get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT order_id FROM orders WHERE order_completed IS NOT NULL")
+                completed = [row[0] for row in cur.fetchall()]
+        finally:
+            self.put_conn(conn)
+
+        if not completed:
+            print("No completed orders to delete.")
+            return
+
+        random.shuffle(completed)
+        self.processed_count = 0
+        self.total_orders = len(completed)
+
+        def delete_one(order_id):
+            def txn():
+                conn = self.get_conn()
+                try:
+                    with conn:
+                        with conn.cursor() as cur:
+                            cur.execute("DELETE FROM order_fills WHERE order_id = %s", (order_id,))
+                            cur.execute("DELETE FROM orders WHERE order_id = %s", (order_id,))
+                finally:
+                    self.put_conn(conn)
+            run_with_retries(txn)
+            with self.progress_lock:
+                self.processed_count += 1
+
+        def progress_logger():
+            start_time = time.time()
+            while self.processed_count < self.total_orders:
+                sleep(30)
+                with self.progress_lock:
+                    elapsed = time.time() - start_time
+                    tps = self.processed_count / elapsed if elapsed > 0 else 0
+                    remaining = self.total_orders - self.processed_count
+                    print(f"📊 Deleted: {self.processed_count:,}, Remaining: {remaining:,}, TPS: {tps:.2f}")
+
+        threading.Thread(target=progress_logger, daemon=True).start()
+
+        with ThreadPoolExecutor(max_workers=THREADS) as executor:
+            list(executor.map(delete_one, completed))
+
+        print(f"✅ Deleted {len(completed)} completed orders and their fills.")
+
 def main():
     with Orders(DB_URI) as orders:
         orders.setup_schema()
@@ -302,6 +361,8 @@ def main():
             orders.insert_orders_from_file()
         if opt.fill:
             orders.fill_orders_parallel_from_file()
+        if opt.delete:
+            orders.delete_completed_orders()
 
 if __name__ == "__main__":
     main()
